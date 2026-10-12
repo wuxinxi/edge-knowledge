@@ -1,0 +1,51 @@
+{
+  "audio": {
+    "score": 1.0,
+    "budget": {
+      "limit": 8192,
+      "max_tokens": 191,
+      "segments": 1
+    }
+  },
+  "video": {
+    "score": 1.0,
+    "budget": {
+      "limit": 8192,
+      "max_tokens": 738,
+      "segments": 1
+    }
+  },
+  "long_video": {
+    "duration": 26,
+    "segments": 2,
+    "times": [
+      [0.0, 24.0],
+      [24.0, 26.0]
+    ],
+    "max_segment_tokens": 3474
+  },
+  "text_to_audio": {
+    "related_score": 0.8568,
+    "unrelated_score": 0.5133
+  },
+  "image_to_image_dimensions": [128, 256, 512, 768],
+  "joint_images_text": {
+    "limit": 8192,
+    "max_tokens": 642,
+    "segments": 1
+  },
+  "text_images_video_audio_joint": {
+    "limit": 8192,
+    "max_tokens": 1310,
+    "segments": 1
+  },
+  "classification": "passed",
+  "clustering": "passed",
+  "similarity": "passed",
+  "context_budget": {
+    "rejected_tokens": 23458,
+    "lossless_text_segments": 3,
+    "limit": 8192
+  },
+  "scope": "Runtime acceptance on local demo samples, not a general retrieval-quality benchmark"
+}

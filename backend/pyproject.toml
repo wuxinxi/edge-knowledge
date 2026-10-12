@@ -1,0 +1,44 @@
+[project]
+name = "edge-knowledge-backend"
+version = "0.1.0"
+description = "Local knowledge assistant with isolated domain, application, and adapters"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.143,<0.144",
+  "uvicorn>=0.35,<1",
+  "python-multipart>=0.0.20,<1",
+  "pydantic-settings>=2.10,<3",
+  "chromadb>=1.5.9,<2",
+  "openai>=3.29,<4",
+  "pypdf>=6,<7",
+  "python-docx>=1.2,<2",
+  "pillow>=12,<13",
+  "av>=16,<18",
+  "numpy>=2,<3",
+  "keyring>=25.7,<26",
+]
+
+[project.optional-dependencies]
+embedding = ["sentence-transformers>=6.1,<7", "transformers>=5.19,<6", "torch>=2.8,<3", "torchvision>=0.23,<1"]
+packaging = ["pyinstaller>=6.16,<7"]
+ocr = ["pyobjc-framework-Vision>=12,<13; sys_platform == 'darwin'"]
+
+[dependency-groups]
+dev = ["pytest>=8.4,<10", "httpx>=0.28,<1", "ruff>=0.12,<1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edge_knowledge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,305 @@
+<script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue'
+import {
+  ArrowUp,
+  ShieldCheck,
+  Database,
+  FileText,
+  Layers3,
+  Plus,
+  Search,
+  Square,
+  Sparkles,
+} from '@lucide/vue'
+import { useAppStore } from '../../app/store'
+import { useChatStore } from './store'
+import ComposerInput from './ComposerInput.vue'
+import { useI18n } from '../../shared/i18n'
+import ChatMessage from './ChatMessage.vue'
+import './chat.css'
+
+const app = useAppStore()
+const { t, preferences, libraryName } = useI18n()
+const chat = useChatStore()
+const question = ref('')
+const mode = ref<'search' | 'chat'>('search')
+const allowImageUpload = ref(false)
+const cloudVision = computed(
+  () => mode.value === 'chat' && app.capabilities?.image_qa_mode === 'cloud_vision',
+)
+const scroller = ref<HTMLElement>()
+const followLatest = ref(true)
+function trackScroll() {
+  const node = scroller.value
+  if (node) followLatest.value = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+}
+function scrollLatest() {
+  followLatest.value = true
+  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
+}
+const composerInput = ref<InstanceType<typeof ComposerInput>>()
+const conversation = computed(() => chat.current(app.activeLibrary))
+const messages = computed(() => conversation.value?.messages ?? [])
+const references = computed(() => conversation.value?.references ?? [])
+function newChat() {
+  if (!messages.value.length) return
+  chat.create(app.activeLibrary)
+  question.value = ''
+  allowImageUpload.value = false
+}
+function exportChat() {
+  if (!conversation.value) return
+  const content =
+    '# ' +
+    (conversation.value.title || t('新对话')) +
+    '\n\n' +
+    messages.value
+      .map(
+        (message) =>
+          '## ' +
+          (message.role === 'user' ? t('你') : 'Edge Assistant') +
+          '\n\n' +
+          message.content +
+          (message.sources.length
+            ? '\n\n' +
+              t('参考资料') +
+              ':\n' +
+              message.sources
+                .map(
+                  (source, i) =>
+                    `[${i + 1}] ${source.filename}${source.section ? ' · ' + source.section : ''}\n${source.text}`,
+                )
+                .join('\n\n')
+            : ''),
+      )
+      .join('\n\n')
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/markdown;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download =
+    (conversation.value.title || 'chat').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) + '.md'
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+const examples = computed(() => [
+  {
+    icon: Search,
+    title: t('查找相关资料'),
+    description: t('一句话找到文档、图片和媒体'),
+    question: t('项目架构与开发计划'),
+    mode: 'search' as const,
+  },
+  {
+    icon: FileText,
+    title: t('梳理文档要点'),
+    description: t('提炼重点，保留可追溯的出处'),
+    question: t('请总结资料中的核心观点，并标注出处。'),
+    mode: 'chat' as const,
+  },
+  {
+    icon: Layers3,
+    title: t('整理行动步骤'),
+    description: t('从现有资料形成清晰的行动清单'),
+    question: t('根据资料，整理可以执行的步骤，并说明依据。'),
+    mode: 'chat' as const,
+  },
+])
+
+async function send(value = question.value) {
+  if (!value.trim() || chat.busy || !app.health) return
+  followLatest.value = true
+  question.value = ''
+  const allowed = allowImageUpload.value
+  allowImageUpload.value = false
+  await chat.ask(app.activeLibrary, value, mode.value, allowed)
+}
+async function retryMessage(id: string) {
+  const allowed = allowImageUpload.value && cloudVision.value
+  allowImageUpload.value = false
+  await chat.retry(app.activeLibrary, id, allowed)
+}
+function useExample(example: (typeof examples.value)[number]) {
+  mode.value = example.mode
+  question.value = example.question
+  void nextTick(() => composerInput.value?.focus())
+}
+watch(
+  () => [app.activeLibrary, chat.activeByLibrary[app.activeLibrary]],
+  () => {
+    chat.stop()
+    followLatest.value = true
+    question.value = ''
+    allowImageUpload.value = false
+  },
+)
+watch(mode, () => {
+  allowImageUpload.value = false
+})
+watch(
+  () => messages.value.map((message) => message.content + message.error).join(''),
+  async () => {
+    await nextTick()
+    if (followLatest.value)
+      scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'instant' })
+  },
+)
+</script>
+
+<template>
+  <section class="chat-page" :class="{ 'is-empty': !messages.length }">
+    <header class="page-header">
+      <div class="chat-header-title">
+        <h1>{{ t('本地助手') }}</h1>
+        <span v-if="messages.length" class="chat-topic" :title="conversation?.title">{{
+          conversation?.title
+        }}</span>
+      </div>
+      <div class="chat-header-actions">
+        <span class="local-badge"><ShieldCheck :size="13" />{{ t('本地优先') }}</span>
+        <button v-if="messages.length" class="text-button" @click="exportChat">
+          {{ t('导出对话') }}</button
+        ><button
+          class="button secondary small"
+          :disabled="chat.busy || !messages.length"
+          @click="newChat"
+        >
+          <Plus :size="16" />{{ t('新对话') }}
+        </button>
+      </div>
+    </header>
+    <div ref="scroller" class="chat-scroll" @scroll="trackScroll">
+      <div v-if="!messages.length" class="chat-welcome">
+        <div class="welcome-emblem"><Sparkles :size="28" :stroke-width="1.5" /></div>
+        <div class="welcome-eyebrow">
+          EDGE ASSISTANT <span> / </span>{{ t('你的本地智能空间') }}
+        </div>
+        <h2>{{ t('今天想处理什么资料？') }}</h2>
+        <p>{{ t('用自然语言查找本地资料，也可以根据资料提问，获得有出处的回答。') }}</p>
+        <div v-if="!app.currentLibrary?.chunks" class="empty-library-note">
+          <span>{{ t('还没有导入资料？') }}</span
+          ><RouterLink to="/library">{{ t('添加第一份文档') }}<span>→</span></RouterLink>
+        </div>
+      </div>
+
+      <div v-else class="message-list" aria-live="polite">
+        <ChatMessage
+          v-for="(message, index) in messages"
+          :key="message.id"
+          :message="message"
+          :library="app.activeLibrary"
+          :generating="chat.busy && index === messages.length - 1"
+          :can-retry="!chat.busy && index === messages.length - 1"
+          @retry="retryMessage(message.id)"
+        />
+      </div>
+    </div>
+
+    <div v-if="chat.savingError" class="inline-error" role="alert">{{ chat.savingError }}</div>
+    <div class="composer-area">
+      <button
+        v-if="messages.length && !followLatest"
+        type="button"
+        class="jump-to-latest"
+        @click="scrollLatest"
+      >
+        {{ t('回到最新回复') }} ↓
+      </button>
+      <form class="composer" @submit.prevent="send()">
+        <div class="mode-selector" role="group" :aria-label="t('助手模式')">
+          <button
+            type="button"
+            :aria-pressed="mode === 'search'"
+            :class="{ selected: mode === 'search' }"
+            :disabled="chat.busy"
+            @click="mode = 'search'"
+          >
+            <Search :size="13" />{{ t('查找资料') }}
+          </button>
+          <button
+            type="button"
+            :aria-pressed="mode === 'chat'"
+            :class="{ selected: mode === 'chat' }"
+            :disabled="chat.busy"
+            @click="mode = 'chat'"
+          >
+            <Sparkles :size="13" />{{ t('资料问答') }}
+          </button>
+        </div>
+        <ComposerInput
+          ref="composerInput"
+          v-model="question"
+          :library="app.activeLibrary"
+          :references="references"
+          :mode="mode"
+          :disabled="!app.health"
+          :busy="chat.busy"
+          :can-create-conversation="!!messages.length"
+          @references="chat.setReferences(app.activeLibrary, $event)"
+          @mode="mode = $event"
+          @send="send()"
+          @new="newChat"
+        />
+        <label v-if="cloudVision" class="image-consent"
+          ><input v-model="allowImageUpload" type="checkbox" :disabled="chat.busy" />{{
+            preferences.values.language === 'en-US'
+              ? `Allow up to ${app.capabilities?.max_cloud_images ?? 3} relevant images to be sent to DeepSeek for this request`
+              : `本次允许将检索到的最多 ${app.capabilities?.max_cloud_images ?? 3} 张相关图片发送至 DeepSeek`
+          }}</label
+        >
+        <div class="composer-toolbar">
+          <span class="context-chip"
+            ><Database />{{
+              libraryName(app.activeLibrary, app.currentLibrary?.name ?? t('我的知识库'))
+            }}</span
+          ><span class="composer-hint">{{
+            t(
+              preferences.values.sendKey === 'enter'
+                ? 'Enter 发送 · Shift + Enter 换行'
+                : 'Ctrl / ⌘ + Enter 发送',
+            )
+          }}</span
+          ><button
+            v-if="chat.busy"
+            class="send-button"
+            type="button"
+            :aria-label="t('停止生成')"
+            @click="chat.stop"
+          >
+            <Square :size="16" fill="currentColor" /></button
+          ><button
+            v-else
+            class="send-button"
+            :disabled="!question.trim() || !app.health"
+            :aria-label="t('发送问题')"
+          >
+            <ArrowUp :size="20" />
+          </button>
+        </div>
+      </form>
+      <div class="composer-footnote">
+        {{
+          mode === 'search'
+            ? t('文档、图片、音视频在本机检索，不调用 DeepSeek。')
+            : cloudVision
+              ? t('云端看图需要支持图片的模型，并需勾选本次发送图片授权。')
+              : t('默认通过本地 OCR 读取图片文字，仅向 DeepSeek 发送相关文字证据。') +
+                ' ' +
+                t('对话历史仅用于理解追问，回答仍以本次检索资料为依据。')
+        }}
+      </div>
+    </div>
+    <div v-if="!messages.length" class="starter-actions">
+      <button
+        v-for="example in examples"
+        :key="example.title"
+        class="starter-action"
+        :disabled="!app.health || chat.busy"
+        @click="useExample(example)"
+      >
+        <span class="starter-icon"><component :is="example.icon" :size="17" /></span
+        ><strong>{{ example.title }}</strong
+        ><small>{{ example.description }}</small>
+      </button>
+    </div>
+  </section>
+</template>

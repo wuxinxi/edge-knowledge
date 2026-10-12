@@ -1,0 +1,51 @@
+{
+  "name": "edge-knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:web": "vite --config vite.web.config.ts",
+    "dev:backend": "uv run --project backend --extra embedding --extra ocr python -m edge_knowledge",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "build": "npm run typecheck && electron-vite build",
+    "test": "vitest run",
+    "test:backend": "uv run --project backend --no-sync pytest backend/tests",
+    "lint:backend": "uv run --project backend --no-sync ruff check backend scripts",
+    "format": "node node_modules/prettier/bin/prettier.cjs --write apps *.ts *.json *.yml docs README.md AGENTS.md && uv run --project backend --no-sync ruff format backend scripts",
+    "check": "npm run typecheck && npm run lint:backend && npm test && npm run test:backend",
+    "package:mac": "npm run build && electron-builder --mac --config electron-builder.yml",
+    "setup:desktop": "node node_modules/electron/install.js",
+    "setup:model": "python3 scripts/download_model.py",
+    "predev": "npm run setup:desktop"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.55.0",
+    "dompurify": "^3.4.17",
+    "markdown-it": "^15.0.2",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.43",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/jsdom": "^30.0.0",
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^22.0.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.10",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.13"
+  }
+}

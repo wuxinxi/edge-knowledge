@@ -1,0 +1,14 @@
+appId: com.tangren.edgeknowledge
+productName: Edge Assistant
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: backend/dist/server
+    to: backend
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  hardenedRuntime: true

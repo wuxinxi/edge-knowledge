@@ -1,0 +1,193 @@
+.folder-sources {
+  margin: 0 0 20px;
+}
+.folder-sources-heading,
+.folder-sources-title,
+.folder-source-row,
+.folder-source-footer,
+.folder-source-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.folder-sources-heading {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.folder-sources-title h3 {
+  font-size: var(--text-label);
+  margin: 0;
+  font-weight: 600;
+}
+.folder-sources-title p,
+.folder-sources-empty p {
+  font-size: var(--text-caption);
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.folder-source-emblem {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--green);
+}
+.folder-sources-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+.folder-sources-empty strong {
+  font-size: var(--text-label);
+  font-weight: 500;
+}
+.folder-source-card {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-card);
+}
+.folder-source-row > svg {
+  color: var(--green);
+  flex-shrink: 0;
+}
+.folder-source-name {
+  min-width: 0;
+  flex: 1;
+}
+.folder-source-name strong {
+  display: block;
+  font-weight: 500;
+  font-size: var(--text-label);
+}
+.folder-source-name small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+.folder-source-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-caption);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.folder-source-status.error,
+.folder-source-status.revoked {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+.folder-source-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 14px 0 10px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.folder-source-actions {
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.folder-source-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-caption);
+}
+.folder-source-disconnect {
+  margin-left: auto;
+}
+.folder-source-policy,
+.folder-source-notice,
+.folder-source-failures {
+  font-size: var(--text-caption);
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 8px 0;
+}
+.folder-source-notice {
+  color: var(--warning);
+}
+.folder-source-progress {
+  margin-top: 12px;
+  font-size: var(--text-caption);
+  color: var(--muted);
+}
+.folder-source-progress progress {
+  display: block;
+  margin-top: 6px;
+  width: 100%;
+  height: 4px;
+  accent-color: var(--green);
+}
+.folder-source-files {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+  font-size: var(--text-caption);
+}
+.folder-source-files input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.folder-source-files > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--text-secondary);
+}
+.folder-source-files > div > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.folder-source-files svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.folder-source-files nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+@media (max-width: 760px) {
+  .folder-sources-heading {
+    align-items: flex-start;
+  }
+  .folder-source-card {
+    padding: 14px;
+  }
+  .folder-source-footer {
+    gap: 4px;
+  }
+  .folder-source-actions {
+    gap: 12px;
+  }
+}

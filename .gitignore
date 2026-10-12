@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+release/
+backend/build/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.env.*
+!.env.example
+data/
+.DS_Store
+coverage/

@@ -1,0 +1,160 @@
+{
+  "sample_only": true,
+  "results": [
+    {
+      "expected": "rongcheng.md",
+      "dense": [
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.8752
+        },
+        {
+          "file": "hangzhou.md",
+          "cosine": 0.8148
+        },
+        {
+          "file": "alpha.md",
+          "cosine": 0.7634
+        },
+        {
+          "file": "bravo.md",
+          "cosine": 0.7575
+        },
+        {
+          "file": "ftp-guide.md",
+          "cosine": 0.737
+        }
+      ],
+      "hybrid": [
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.8752
+        }
+      ]
+    },
+    {
+      "expected": "rongcheng.md",
+      "dense": [
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.7777
+        },
+        {
+          "file": "hangzhou.md",
+          "cosine": 0.7167
+        },
+        {
+          "file": "ftp-guide.md",
+          "cosine": 0.7029
+        },
+        {
+          "file": "bravo.md",
+          "cosine": 0.7016
+        },
+        {
+          "file": "alpha.md",
+          "cosine": 0.6968
+        }
+      ],
+      "hybrid": [
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.8301
+        }
+      ]
+    },
+    {
+      "expected": "alpha.md",
+      "dense": [
+        {
+          "file": "alpha.md",
+          "cosine": 0.9186
+        },
+        {
+          "file": "bravo.md",
+          "cosine": 0.8073
+        },
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.7482
+        },
+        {
+          "file": "hangzhou.md",
+          "cosine": 0.7437
+        },
+        {
+          "file": "ftp-guide.md",
+          "cosine": 0.698
+        }
+      ],
+      "hybrid": [
+        {
+          "file": "alpha.md",
+          "cosine": 0.9186
+        }
+      ]
+    },
+    {
+      "expected": "architecture.md",
+      "dense": [
+        {
+          "file": "architecture.md",
+          "cosine": 0.7716
+        },
+        {
+          "file": "rongcheng.md",
+          "cosine": 0.7095
+        },
+        {
+          "file": "hangzhou.md",
+          "cosine": 0.6922
+        },
+        {
+          "file": "alpha.md",
+          "cosine": 0.6898
+        },
+        {
+          "file": "bravo.md",
+          "cosine": 0.6877
+        }
+      ],
+      "hybrid": [
+        {
+          "file": "architecture.md",
+          "cosine": 0.7716
+        }
+      ]
+    },
+    {
+      "expected": "recipe.md",
+      "dense": [
+        {
+          "file": "recipe.md",
+          "cosine": 0.8576
+        },
+        {
+          "file": "architecture.md",
+          "cosine": 0.5819
+        },
+        {
+          "file": "ftp-guide.md",
+          "cosine": 0.5732
+        },
+        {
+          "file": "alpha.md",
+          "cosine": 0.5721
+        },
+        {
+          "file": "bravo.md",
+          "cosine": 0.56
+        }
+      ],
+      "hybrid": [
+        {
+          "file": "recipe.md",
+          "cosine": 0.8576
+        }
+      ]
+    }
+  ]
+}
