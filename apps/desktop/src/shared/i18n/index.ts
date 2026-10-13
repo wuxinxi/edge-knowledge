@@ -2,6 +2,17 @@ import { usePreferences } from '../preferences/store'
 
 // Product copy is translated here; source text and model answers retain their original language.
 const english: Record<string, string> = {
+  处理过程: 'Processing activity',
+  处理完成: 'Completed',
+  连接本地服务: 'Connecting to local service',
+  执行本地查询: 'Running local query',
+  检查资料范围: 'Checking source scope',
+  理解问题: 'Understanding the question',
+  检索相关资料: 'Searching relevant sources',
+  筛选与计算: 'Filtering and calculating',
+  比较笔记正文: 'Comparing note content',
+  整理回答依据: 'Preparing evidence',
+  展示查询结果: 'Presenting results',
   展开来源: 'Show sources',
   处理说明: 'Processing details',
   展开其余片段: 'Show more excerpts',

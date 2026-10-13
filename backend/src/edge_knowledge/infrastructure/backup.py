@@ -112,7 +112,30 @@ class ComparisonValue(StrictModel):
     content_similarity: float | None = Field(default=None, ge=0, le=1)
 
 
+class ProcessingStep(StrictModel):
+    stage: Literal[
+        "waiting",
+        "querying",
+        "validating",
+        "planning",
+        "retrieving",
+        "executing",
+        "comparing",
+        "preparing",
+        "generating",
+        "presenting",
+    ]
+    startedAt: int = Field(ge=0)
+
+
+class ProcessingTrace(StrictModel):
+    startedAt: int = Field(ge=0)
+    finishedAt: int | None = Field(default=None, ge=0)
+    steps: list[ProcessingStep] = Field(max_length=32)
+
+
 class AnswerVersionValue(StrictModel):
+    processing: ProcessingTrace | None = None
     content: str
     sources: list[SourceValue]
     error: str | None = None
@@ -124,6 +147,7 @@ class AnswerVersionValue(StrictModel):
 
 
 class MessageValue(StrictModel):
+    processing: ProcessingTrace | None = None
     id: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]
     content: str

@@ -166,6 +166,11 @@ def test_comparison_excerpts_and_paths_survive_conversation_and_backup_roundtrip
     }
     state = snapshot()
     message = state["sessions"][0]["messages"][0]
+    message["processing"] = {
+        "startedAt": 100,
+        "finishedAt": 500,
+        "steps": [{"stage": "comparing", "startedAt": 100}],
+    }
     message["comparisons"] = [pair]
     message["versions"] = [
         {"content": "旧结果", "sources": [], "savedAt": "2026-10-13", "comparisons": [pair]}
@@ -175,8 +180,10 @@ def test_comparison_excerpts_and_paths_survive_conversation_and_backup_roundtrip
     )
     validated.pop("revision")
     service = ConversationService(SQLiteConversationStore(tmp_path / "chats.sqlite3"))
+    assert validated["sessions"][0]["messages"][0]["processing"] == message["processing"]
     service.save(validated, 0)
     assert service.read()["sessions"][0]["messages"][0]["comparisons"] == [pair]
+    assert service.read()["sessions"][0]["messages"][0]["processing"] == message["processing"]
     codec = ZipBackupCodec()
     restored = codec.decode(
         codec.encode(

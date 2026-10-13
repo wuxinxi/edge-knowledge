@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Copy, Check, RotateCcw, Sparkles, Search, LoaderCircle } from '@lucide/vue'
+import { Copy, Check, RotateCcw, Sparkles, Search } from '@lucide/vue'
 import type { Message } from './store'
 import { useI18n } from '../../shared/i18n'
 import MarkdownAnswer from './MarkdownAnswer.vue'
@@ -8,6 +8,7 @@ import AnswerSources from './AnswerSources.vue'
 import DuplicateMatches from './DuplicateMatches.vue'
 import type { TaskRecord } from '../tasks/store'
 import TaskFeedback from '../tasks/TaskFeedback.vue'
+import ChatActivity from './ChatActivity.vue'
 const props = defineProps<{
   message: Message
   library: string
@@ -72,28 +73,39 @@ async function copy() {
         ><strong>Edge Assistant</strong
         ><span class="assistant-mode">{{
           t(
-            message.comparisons?.length
-              ? message.planner === 'deepseek'
-                ? '重复检查 · AI 规划'
-                : '本地重复检查'
-              : message.planner === 'deepseek' && message.mode === 'search'
-                ? '本机结果 · AI 规划'
-                : message.planner === 'local_model' && message.mode === 'search'
-                  ? '本机结果 · 本地模型规划'
-                  : message.mode === 'search' || (generating && task?.phase === '查找资料')
-                    ? '本地检索'
-                    : message.generator === 'local'
-                      ? '本地模型回答'
-                      : 'DeepSeek 解读',
+            generating && !message.generator && !message.content
+              ? '处理中'
+              : message.comparisons?.length
+                ? message.planner === 'deepseek'
+                  ? '重复检查 · AI 规划'
+                  : '本地重复检查'
+                : message.planner === 'deepseek' && message.mode === 'search'
+                  ? '本机结果 · AI 规划'
+                  : message.planner === 'local_model' && message.mode === 'search'
+                    ? '本机结果 · 本地模型规划'
+                    : message.mode === 'search' || (generating && task?.phase === '查找资料')
+                      ? '本地检索'
+                      : message.generator === 'local'
+                        ? '本地模型回答'
+                        : 'DeepSeek 解读',
           )
-        }}</span
-        ><span v-if="generating" class="assistant-stream-label"
-          ><LoaderCircle :size="12" class="spin" />{{ t('正在回答') }}</span
-        >
+        }}</span>
       </div>
       <div class="assistant-answer">
+        <ChatActivity
+          v-if="message.processing"
+          :processing="message.processing"
+          :running="generating"
+          :has-content="!!message.content"
+          :status="message.status"
+        />
         <TaskFeedback
-          v-if="task && (generating || task.state === 'stopped' || task.state === 'error')"
+          v-if="
+            task &&
+            ((!message.processing && generating) ||
+              task.state === 'stopped' ||
+              task.state === 'error')
+          "
           :task="task"
           class="chat-task-feedback"
         />
@@ -138,6 +150,13 @@ async function copy() {
               {{ t('重试前的回答') }} {{ index + 1 }} ·
               {{ new Date(version.savedAt).toLocaleString() }}
             </summary>
+            <ChatActivity
+              v-if="version.processing"
+              :processing="version.processing"
+              :running="false"
+              :has-content="!!version.content"
+              :status="version.error ? 'error' : 'complete'"
+            />
             <MarkdownAnswer :content="version.content" :source-count="0" />
             <p v-if="version.error" class="inline-error">{{ version.error }}</p>
             <DuplicateMatches

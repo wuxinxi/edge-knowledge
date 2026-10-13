@@ -4,6 +4,7 @@ export interface Reference {
   filename: string
 }
 export interface AnswerVersion {
+  processing?: import('./processing').ChatProcessing
   content: string
   sources: Source[]
   error?: string
@@ -14,6 +15,7 @@ export interface AnswerVersion {
   comparisons?: DuplicateComparison[]
 }
 export interface Message {
+  processing?: import('./processing').ChatProcessing
   id: string
   role: 'user' | 'assistant'
   content: string

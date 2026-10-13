@@ -41,6 +41,7 @@ class HistoryEntry(StrictBody):
 
 
 class QueryRequest(StrictBody):
+    progress: bool = False
     library_id: str = "default"
     question: str = Field(min_length=1, max_length=4000)
     top_k: int | None = Field(default=None, ge=1, le=20)

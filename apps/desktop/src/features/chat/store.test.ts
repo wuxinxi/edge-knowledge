@@ -493,3 +493,31 @@ it('keeps manual titles and interrupted stream content when reopening database r
   expect(store.current('default')!.messages[0]!.status).toBe('stopped')
   expect(store.lastLibrary).toBe('default')
 })
+
+it('keeps actual processing stages and duration across saving and retry history', async () => {
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'progress', stage: 'validating' }
+    yield { type: 'progress', stage: 'planning' }
+    yield { type: 'progress', stage: 'retrieving' }
+    yield { type: 'sources', sources: [] }
+    yield { type: 'execution', location: 'local', generator: 'local' }
+    yield { type: 'delta', delta: '本地回答' }
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '总结资料', 'chat')
+  const answer = store.current('default')!.messages[1]!
+  expect(answer.processing?.steps.map((step) => step.stage)).toEqual([
+    'waiting',
+    'validating',
+    'planning',
+    'retrieving',
+    'generating',
+  ])
+  expect(answer.processing!.finishedAt).toBeGreaterThanOrEqual(answer.processing!.startedAt)
+  const original = structuredClone(JSON.parse(JSON.stringify(answer.processing)))
+  await store.retry('default', answer.id)
+  expect(answer.versions!.at(-1)!.processing).toEqual(original)
+  setActivePinia(createPinia())
+  expect(useChatStore().current('default')!.messages[1]!.processing).toEqual(answer.processing)
+})

@@ -207,3 +207,7 @@ CatalogMirror 通过 MetadataReader 和 DocumentCatalog 端口维护派生索引
 ## 本地生成模型与显式云端备选
 
 `LocalModelRuntime` 端口隔离推理进程的状态、加载与关闭。bootstrap 注入 `LlamaRuntime`、`LocalQueryPlanner`、`LocalGenerator` 和 `SelectedGenerator`；子进程、私有认证、loopback HTTP 与 tokenizer 预算均在基础设施层。生成计划保存提供方快照，运行失败不能自动换为云端。查询执行器可在纯本地请求中使用本地规划端口；云端规划仅在明确选择 DeepSeek 与授权 AI 请求时调用。共享日历编译器保留明确年月统计范围，数据库执行受限 QuerySpec，任何模型都不计算全量统计答案。完整运行与发行边界见 [本地模型](local-model.md)。
+
+## 聊天处理阶段
+
+ChatService 与 QueryService 通过可选标准库 Callable 报告真实阶段，应用层不依赖 SSE 或线程通信实现。API 仅在进度请求中以队列连接工作线程与 SSE，将准备阶段事件提前送达；旧客户端保留原 HTTP 错误约定。前端 ChatActivity 独立显示阶段与观察耗时，过程记录走原有会话和备份边界。未启用模型原始 reasoning 输出，不生成或伪造思考文本。

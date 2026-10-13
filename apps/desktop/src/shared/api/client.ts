@@ -243,6 +243,7 @@ export const api = {
     const response = await request('/api/query', {
       method: 'POST',
       ...payload({
+        progress: true,
         library_id: library,
         question,
         allow_image_upload: allowImageUpload,

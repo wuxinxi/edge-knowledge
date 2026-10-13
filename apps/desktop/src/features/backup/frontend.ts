@@ -1,3 +1,4 @@
+import { chatStages } from '../../shared/types/processing'
 import type { Conversation, Message } from '../chat/store'
 import { validatePreferences, type Preferences } from '../../shared/preferences/store'
 
@@ -123,7 +124,23 @@ export function validateChatBackup(value: unknown): Conversation[] {
             : {}),
         }
       })
+      if (message.processing) {
+        const trace = message.processing
+        const validTime = (value: unknown) =>
+          typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        if (
+          !validTime(trace.startedAt) ||
+          (trace.finishedAt !== undefined && !validTime(trace.finishedAt)) ||
+          !Array.isArray(trace.steps) ||
+          trace.steps.length > 32 ||
+          trace.steps.some(
+            (step) => !step || !chatStages.includes(step.stage) || !validTime(step.startedAt),
+          )
+        )
+          throw new Error('处理过程格式无效。')
+      }
       return {
+        ...(message.processing ? { processing: structuredClone(message.processing) } : {}),
         id: message.id,
         role: message.role,
         content: message.content,
@@ -159,6 +176,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                           sources: version.sources,
                           versions: undefined,
                           comparisons: version.comparisons,
+                          processing: version.processing,
                         },
                       ],
                     },
@@ -169,6 +187,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                   sources: nested.sources,
                   ...(nested.comparisons ? { comparisons: nested.comparisons } : {}),
                   savedAt: version.savedAt,
+                  ...(nested.processing ? { processing: nested.processing } : {}),
                   ...(version.generator === 'local' || version.generator === 'deepseek'
                     ? { generator: version.generator }
                     : {}),

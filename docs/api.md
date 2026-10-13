@@ -195,3 +195,9 @@ Settings 新增 `generation_provider: local|deepseek`（默认 local）、`local
 `POST /api/local-model/load` 经本地会话认证，加载已配置文件并返回状态；`GET /api/capabilities` 的 `local_model` 显示 configured/model_available/runtime_available/loaded/model/context_size。读取状态不启动推理。
 
 `/api/local-query` 永不调用云端，即使允许规划或设置选择 DeepSeek，也只能使用本地规划器。`/api/query` 默认选择设置的本地生成器，云端需要明确选择 DeepSeek。执行事件保留 `location`，另有 `generator: local|deepseek` 表示是否生成文字，以及 `planner: local_model|deepseek` 表示模型规划来源。本地生成不是纯检索，不能仅按 location=local 把它显示成查找结果。会话和备份保存 generator/planner。
+
+## 聊天处理进度
+
+`POST /api/query` 可设置 `progress: true`，服务端立即建立 SSE，在准备计划的工作线程开始相应操作时发送 `{type:"progress",stage:"validating"|"planning"|"retrieving"|"executing"|"comparing"|"preparing"|"generating"|"presenting"}`。准备失败也是终止 SSE error；未设置该字段的旧客户端保留准备阶段 HTTP 错误响应。sources/execution/delta/done 的原约定不变。
+
+这些事件说明实际工具阶段，不是模型内部推理文本。界面记录观察到的阶段开始时间与请求起止时间，包含网络、首次模型加载及等待，不冒充纯模型推理耗时。会话、历史回答及备份新增可选 processing（startedAt/finishedAt 毫秒时间戳与最多 32 条阶段记录）。本地结构化查询仍走 REST，界面只显示“执行本地查询”，不猜测服务端子阶段。停止接收不承诺取消已经开始的后台推理。

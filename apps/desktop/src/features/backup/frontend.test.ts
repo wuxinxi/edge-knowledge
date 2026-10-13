@@ -118,3 +118,38 @@ it('preserves both duplicate sides, original whitespace and historical compariso
   expect(backup[0]!.messages[0]!.comparisons).toEqual([pair])
   expect(backup[0]!.messages[0]!.versions![0]!.comparisons).toEqual([pair])
 })
+
+it('preserves processing activity for the answer and each historic version and rejects invalid stages', () => {
+  const processing = {
+    startedAt: 100,
+    finishedAt: 600,
+    steps: [{ stage: 'retrieving' as const, startedAt: 100 }],
+  }
+  const message = {
+    ...conversation.messages[0]!,
+    processing,
+    versions: [{ content: 'old', sources: [], savedAt: '2026', processing }],
+  }
+  const saved = validateChatBackup({
+    version: 1,
+    sessions: [{ ...conversation, messages: [message] }],
+  })[0]!.messages[0]!
+  expect(saved.processing).toEqual(processing)
+  expect(saved.versions![0]!.processing).toEqual(processing)
+  expect(() =>
+    validateChatBackup({
+      version: 1,
+      sessions: [
+        {
+          ...conversation,
+          messages: [
+            {
+              ...message,
+              processing: { ...processing, steps: [{ stage: 'invented', startedAt: 100 }] },
+            },
+          ],
+        },
+      ],
+    }),
+  ).toThrow('处理过程')
+})

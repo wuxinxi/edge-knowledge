@@ -125,6 +125,7 @@ export type SettingsPatch = Partial<
   >
 > & { api_key?: string }
 export type ChatEvent =
+  | { type: 'progress'; stage: import('./processing').ChatStage }
   | {
       type: 'execution'
       location: 'local' | 'cloud'

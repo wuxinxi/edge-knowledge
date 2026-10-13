@@ -127,3 +127,69 @@ def test_cloud_failure_is_a_terminal_sse_error(system):
     payloads = events(client.post("/api/query", json={"question": "问题"}))
     assert payloads[-1] == {"type": "error", "message": "服务超时", "code": "upstream_timeout"}
     assert not any(event["type"] == "done" for event in payloads)
+
+
+def test_opt_in_progress_starts_before_preparation_and_preserves_terminal_errors(system):
+    client, _, chat, generator = system
+    upload(client)
+    # Legacy callers retain HTTP preparation errors.
+    assert client.post("/api/query", json={"question": "内容是什么？"}).status_code == 409
+    payloads = events(
+        client.post("/api/query", json={"question": "内容是什么？", "progress": True})
+    )
+    assert payloads[0] == {"type": "progress", "stage": "validating"}
+    assert any(e == {"type": "progress", "stage": "retrieving"} for e in payloads)
+    assert payloads[-1]["type"] == "error"
+    assert not any(e["type"] == "done" for e in payloads)
+    assert generator.calls == 0
+    client.patch("/api/settings", json={"api_key": "test-key"})
+    payloads = events(client.post("/api/query", json={"question": "请总结资料", "progress": True}))
+    stages = [e["stage"] for e in payloads if e["type"] == "progress"]
+    assert stages == ["validating", "retrieving", "preparing", "generating"]
+    assert payloads[-1] == {"type": "done"}
+    assert generator.calls == 1
+
+
+def test_progress_stream_yields_before_blocked_preparation(system):
+    import asyncio
+    import threading
+
+    from starlette.requests import Request
+
+    from edge_knowledge.api.schemas import QueryRequest
+    from edge_knowledge.domain.models import QueryPlan
+
+    client, _, chat, _ = system
+    gate = threading.Event()
+    original = chat.prepare
+
+    def blocked(*args, progress):
+        progress("validating")
+        assert gate.wait(3)
+        return QueryPlan([], "", "", "", "", True, "本地结果")
+
+    chat.prepare = blocked
+    endpoint = next(route.endpoint for route in client.app.routes if route.path == "/api/query")
+
+    async def verify():
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        response = await endpoint(
+            QueryRequest(question="测试", progress=True), Request({"type": "http"}, receive)
+        )
+        iterator = response.body_iterator
+        try:
+            first = await asyncio.wait_for(anext(iterator), 1)
+            assert "validating" in first and not gate.is_set()
+            gate.set()
+            rest = [value async for value in iterator]
+            assert "done" in rest[-1]
+        finally:
+            gate.set()
+            await iterator.aclose()
+
+    try:
+        asyncio.run(verify())
+    finally:
+        chat.prepare = original

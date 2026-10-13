@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import asdict
 
@@ -168,7 +168,10 @@ class ChatService:
         query_plan: dict | None = None,
         allow_planning: bool = False,
         timezone: str = "Asia/Shanghai",
+        progress: Callable[[str], None] | None = None,
     ) -> QueryPlan:
+        report = progress or (lambda stage: None)
+        report("validating")
         config = self.settings.read()
         provider = config.get("generation_provider", "deepseek")
         history = history or []
@@ -176,7 +179,13 @@ class ChatService:
             raise AppError("对话上下文过长，请新建对话。")
         resolved = (
             self.queries.resolve(
-                library_id, question, document_ids, query_plan, allow_planning, timezone
+                library_id,
+                question,
+                document_ids,
+                query_plan,
+                allow_planning,
+                timezone,
+                progress=report,
             )
             if self.queries
             else None
@@ -199,6 +208,8 @@ class ChatService:
             )
         previous = next((item.content for item in reversed(history) if item.role == "user"), "")
         retrieval_question = contextual_question(question, previous)
+        if not resolved:
+            report("retrieving")
         hits = (
             resolved["sources"]
             if resolved
@@ -219,6 +230,7 @@ class ChatService:
                 else "没有找到相关资料，请换个描述或缩小资料范围。",
                 notice="本次仅在本机检索并展示原文，不调用 DeepSeek，也不发送图片或文字。",
             )
+        report("preparing")
         image_hits = [hit for hit in hits if hit.kind == "image"]
         attachments, notice = [], ""
         usable = [

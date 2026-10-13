@@ -14,6 +14,7 @@ import type {
 export type { Conversation, Message, Reference } from '../../shared/types/conversations'
 import { useTaskStore } from '../tasks/store'
 import { updateConversationTitle } from './title'
+import { chatStages, stageLabels, type ChatStage } from '../../shared/types/processing'
 
 const storageKey = 'edge-assistant.chats.v1'
 export function boundedHistory(messages: Message[]): HistoryMessage[] {
@@ -349,7 +350,13 @@ export const useChatStore = defineStore('chat', () => {
       library,
       { stop, stopLabel: '停止回答' },
     ))
-    tasks.update(feedback, { phase: '查找资料' })
+    answer.processing = { startedAt: Date.now(), steps: [] }
+    function stage(value: ChatStage) {
+      if (!chatStages.includes(value) || answer.processing!.steps.at(-1)?.stage === value) return
+      answer.processing!.steps.push({ stage: value, startedAt: Date.now() })
+      tasks.update(feedback, { phase: stageLabels[value] })
+    }
+    stage(mode === 'search' ? 'querying' : 'waiting')
     try {
       await persist()
       pending.signal.throwIfAborted()
@@ -388,19 +395,19 @@ export const useChatStore = defineStore('chat', () => {
           ...(queryPlan ? { queryPlan } : {}),
         },
       )) {
+        if (event.type === 'progress') stage(event.stage)
         if (event.type === 'comparisons') {
           answer.comparisons = event.comparisons
-          tasks.update(feedback, { phase: '比较资料' })
         }
         if (event.type === 'sources') {
           answer.sources = event.sources
-          tasks.update(feedback, { phase: '生成回答' })
+          // Sources arrive before execution metadata; they do not imply generation.
         }
         if (event.type === 'execution') {
           answer.planner = event.planner
           answer.generator = event.generator
           answer.mode = event.generator ? 'chat' : event.location === 'local' ? 'search' : 'chat'
-          tasks.update(feedback, { phase: event.generator ? '生成回答' : '查找资料' })
+          stage(event.generator ? 'generating' : 'presenting')
         }
         if (event.type === 'delta') answer.content += event.delta
         if (event.type === 'notice') answer.notice = event.message
@@ -422,6 +429,7 @@ export const useChatStore = defineStore('chat', () => {
             : t('回答失败，请重试。')
       answer.status = pending.signal.aborted ? 'stopped' : 'error'
     } finally {
+      answer.processing!.finishedAt = Date.now()
       tasks.finish(
         feedback,
         answer.status === 'stopped' ? 'stopped' : answer.error ? 'error' : 'success',
@@ -459,6 +467,7 @@ export const useChatStore = defineStore('chat', () => {
       planner: original.planner,
       generator: original.generator,
       comparisons: original.comparisons,
+      processing: original.processing,
     })
     answer.status = 'streaming'
     answer.content = ''
@@ -490,7 +499,8 @@ export const useChatStore = defineStore('chat', () => {
           savedAt: new Date().toISOString(),
           planner: original.planner,
           generator: original.generator,
-          comparisons: original.comparisons,
+          comparisons: answer.comparisons,
+          processing: answer.processing,
         })
       }
       const versions = answer.versions

@@ -1,7 +1,8 @@
+import asyncio
 import json
 import logging
 import secrets
-from contextlib import aclosing, asynccontextmanager
+from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Annotated
 
@@ -285,8 +286,7 @@ def create_app(
 
     @app.post("/api/query")
     async def query(body: QueryRequest, request: Request):
-        plan = await run_in_threadpool(
-            chat.prepare,
+        arguments = (
             body.library_id,
             body.question,
             body.top_k,
@@ -298,10 +298,54 @@ def create_app(
             body.allow_planning,
             body.timezone,
         )
+        # Existing clients keep preflight HTTP errors. Opt-in clients receive preparation
+        # progress immediately and any preparation failure as a terminal SSE error.
+        plan = None if body.progress else await run_in_threadpool(chat.prepare, *arguments)
 
         async def events():
+            producer = None
+            accepting = True
             try:
-                async with aclosing(chat.events(plan)) as iterator:
+                current = plan
+                if body.progress:
+                    loop = asyncio.get_running_loop()
+                    queue = asyncio.Queue()
+
+                    def deliver(stage):
+                        if accepting:
+                            queue.put_nowait({"type": "progress", "stage": stage})
+
+                    def report(stage):
+                        loop.call_soon_threadsafe(deliver, stage)
+
+                    async def prepare():
+                        try:
+                            return await run_in_threadpool(
+                                chat.prepare, *arguments, progress=report
+                            )
+                        finally:
+                            queue.put_nowait(None)
+
+                    producer = asyncio.create_task(prepare())
+                    while (event := await queue.get()) is not None:
+                        if await request.is_disconnected():
+                            return
+                        yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+                    current = await producer
+                if body.progress:
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "type": "progress",
+                                "stage": "presenting"
+                                if current.local_answer is not None
+                                else "generating",
+                            }
+                        )
+                        + "\n\n"
+                    )
+                async with aclosing(chat.events(current)) as iterator:
                     async for event in iterator:
                         if await request.is_disconnected():
                             return
@@ -318,6 +362,13 @@ def create_app(
             except Exception as exc:
                 logger.error("Streaming failure: %s", type(exc).__name__)
                 yield 'data: {"type":"error","message":"回答中断，请重试。"}\n\n'
+            finally:
+                accepting = False
+                if producer is not None:
+                    if not producer.done():
+                        producer.cancel()
+                    with suppress(asyncio.CancelledError, Exception):
+                        await producer
 
         return StreamingResponse(
             events(),

@@ -129,7 +129,9 @@ class QueryService:
         allow_planner: bool = False,
         timezone: str = "Asia/Shanghai",
         local_only: bool = False,
+        progress: Callable[[str], None] | None = None,
     ) -> dict | None:
+        report = progress or (lambda stage: None)
         ids = ids or []
         with self.knowledge.transaction():
             documents = self.knowledge.repository.documents(library)
@@ -174,6 +176,7 @@ class QueryService:
                         "query": {"plan": spec.mapping(), "planner": "local"},
                     }
                 self.mirror.ensure(library, documents)
+                report("planning")
                 spec = QuerySpec.parse(
                     planner.plan(
                         question,
@@ -222,7 +225,9 @@ class QueryService:
                     "notice": self._notice(planned),
                 }
             if spec.operation == "duplicates":
+                report("comparing")
                 return self._duplicates(library, documents, spec, ids, timezone, planned)
+            report("retrieving" if spec.operation in {"search", "answer"} else "executing")
             self.mirror.ensure(library, documents)
             result = self.mirror.catalog.query(library, spec, ids, timezone)
             if spec.operation in {"search", "answer"}:

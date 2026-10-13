@@ -39,7 +39,30 @@ class ComparisonBody(Strict):
     content_similarity: float | None = Field(default=None, ge=0, le=1)
 
 
+class ProcessingStep(Strict):
+    stage: Literal[
+        "waiting",
+        "querying",
+        "validating",
+        "planning",
+        "retrieving",
+        "executing",
+        "comparing",
+        "preparing",
+        "generating",
+        "presenting",
+    ]
+    startedAt: int = Field(ge=0)
+
+
+class ProcessingTrace(Strict):
+    startedAt: int = Field(ge=0)
+    finishedAt: int | None = Field(default=None, ge=0)
+    steps: list[ProcessingStep] = Field(max_length=32)
+
+
 class AnswerVersion(Strict):
+    processing: ProcessingTrace | None = None
     content: str
     sources: list[SourceBody]
     error: str | None = None
@@ -51,6 +74,7 @@ class AnswerVersion(Strict):
 
 
 class MessageBody(Strict):
+    processing: ProcessingTrace | None = None
     id: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]
     content: str
