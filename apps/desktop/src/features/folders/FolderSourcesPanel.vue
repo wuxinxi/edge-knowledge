@@ -19,7 +19,10 @@ import './folders.css'
 
 const app = useAppStore()
 const { t, preferences } = useI18n()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{
+  changed: []
+  status: [value: { count: number; running: number; failed: number }]
+}>()
 const available = api.foldersAvailable()
 const sources = ref<FolderSource[]>([])
 const action = ref('')
@@ -40,6 +43,16 @@ let timer: ReturnType<typeof setInterval> | undefined
 let polling = false
 let lastLibraryRefresh = 0
 const running = (source: FolderSource) => ['queued', 'scanning', 'syncing'].includes(source.state)
+watch(
+  () => sources.value.map((source) => source.state).join('|'),
+  () =>
+    emit('status', {
+      count: sources.value.length,
+      running: sources.value.filter(running).length,
+      failed: sources.value.filter((source) => source.state === 'error').length,
+    }),
+  { immediate: true },
+)
 function status(source: FolderSource) {
   if (source.state === 'idle' && !source.lastSynced) return t('等待同步')
   return t(
@@ -101,6 +114,7 @@ async function run(id: string, operation: () => Promise<unknown>) {
 function chooseFolder() {
   void run('choose', () => api.folderChoose(app.activeLibrary))
 }
+defineExpose({ chooseFolder })
 function syncFolder(source: FolderSource) {
   void run(source.id, () => api.folderSync(source.id))
 }

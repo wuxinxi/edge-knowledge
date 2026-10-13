@@ -88,3 +88,212 @@
     gap: 8px;
   }
 }
+
+.library-page {
+  position: relative;
+}
+.library-content {
+  width: 100%;
+  padding-top: 18px;
+}
+.library-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.library-summary > span {
+  opacity: 0.5;
+}
+.library-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.library-source-details {
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 14px;
+}
+.library-source-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  padding: 12px 2px;
+  list-style: none;
+}
+.library-source-details > summary::-webkit-details-marker {
+  display: none;
+}
+.library-source-details > summary > span {
+  color: var(--muted);
+  margin-left: auto;
+}
+.library-source-details[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.library-source-details .folder-sources {
+  margin: 4px 0 16px;
+}
+.library-import-details {
+  margin: 10px 0 4px;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+.library-import-details > summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.library-import-details .import-results {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+.library-content > .task-feedback {
+  margin-bottom: 6px;
+}
+.library-menu {
+  position: fixed;
+  inset: 78px 36px auto auto;
+  width: min(260px, calc(100vw - 72px));
+  padding: 6px;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+@supports (top: anchor(bottom)) {
+  .library-menu {
+    top: calc(anchor(bottom) + 7px);
+    right: anchor(right);
+  }
+}
+.library-menu button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px;
+  text-align: left;
+  font-size: var(--text-label);
+}
+.library-menu button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.library-menu button > svg {
+  flex-shrink: 0;
+}
+.library-menu strong {
+  display: block;
+  font-size: var(--text-label);
+  font-weight: 500;
+}
+.library-menu small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.library-menu > p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 5px 5px 3px;
+  padding: 9px 4px 4px;
+  border-top: 1px solid var(--line);
+}
+.library-management-menu {
+  width: 205px;
+}
+.library-drop-overlay {
+  position: absolute;
+  z-index: 15;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 2px dashed var(--green);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--green);
+  pointer-events: none;
+  box-shadow: var(--shadow-float);
+}
+.library-drop-overlay strong {
+  font-size: var(--text-section);
+  font-weight: 500;
+}
+.library-drop-overlay span {
+  font-size: var(--text-label);
+  color: var(--text-secondary);
+}
+.library-ocr-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-caption);
+  color: var(--muted);
+}
+.library-ocr-dialog {
+  width: min(800px, calc(100vw - 32px));
+}
+.library-ocr-dialog .ocr-extraction {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+}
+@media (max-width: 760px) {
+  .library-header-actions {
+    gap: 6px;
+  }
+  .library-source-details > summary > span {
+    display: none;
+  }
+  .library-source-details > summary > svg:last-child {
+    margin-left: auto;
+  }
+}
+.library-page .document-row {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.library-page .document-name > div {
+  gap: 4px;
+}
+.library-page .document-name .media-preview {
+  margin-top: 0;
+}
+.document-select-all {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.document-select-all input {
+  accent-color: var(--green);
+  width: 14px;
+  height: 14px;
+}
+.library-page .document-table-head {
+  grid-template-columns: minmax(0, 1fr) 70px 110px 104px;
+}
+@media (max-width: 1050px) and (min-width: 761px) {
+  .library-page .document-table-head {
+    grid-template-columns: minmax(0, 1fr) 50px 95px 92px;
+  }
+}
+@media (max-width: 760px) {
+  .library-page .document-table-head {
+    grid-template-columns: minmax(0, 1fr) 46px 70px;
+  }
+}

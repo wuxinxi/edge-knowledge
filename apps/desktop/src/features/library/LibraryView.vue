@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Check,
   FileText,
@@ -12,6 +12,11 @@ import {
   Film,
   AudioLines,
   Layers3,
+  Plus,
+  FolderOpen,
+  ScanText,
+  MoreHorizontal,
+  ChevronDown,
 } from '@lucide/vue'
 import { useAppStore } from '../../app/store'
 import { useI18n } from '../../shared/i18n'
@@ -22,8 +27,30 @@ import ImagePreview from '../../shared/components/ImagePreview.vue'
 import FolderSourcesPanel from '../folders/FolderSourcesPanel.vue'
 import { toggleVisibleSelection } from './selection'
 import './library.css'
+import { useImportStore } from './imports'
+import { useTaskStore } from '../tasks/store'
+import TaskFeedback from '../tasks/TaskFeedback.vue'
 
 const app = useAppStore()
+const imports = useImportStore(),
+  tasks = useTaskStore()
+const foldersOpen = ref(false),
+  folderPanel = ref<InstanceType<typeof FolderSourcesPanel>>()
+const extractionDialog = ref<HTMLDialogElement>()
+const folderAvailable = api.foldersAvailable()
+const folderStatus = ref({ count: 0, running: 0, failed: 0 })
+const folderSummary = computed(() =>
+  folderStatus.value.running
+    ? `${t('同步中')} · ${folderStatus.value.running}`
+    : folderStatus.value.failed
+      ? `${t('需要处理')} · ${folderStatus.value.failed}`
+      : folderStatus.value.count
+        ? `${t('已连接')} · ${folderStatus.value.count}`
+        : t('管理目录与同步状态'),
+)
+const importTask = computed(() =>
+  imports.job?.library === app.activeLibrary ? tasks.get(imports.job.taskId) : undefined,
+)
 const { t, preferences, libraryName } = useI18n()
 const documents = ref<Document[]>([])
 const filter = ref(''),
@@ -72,11 +99,11 @@ const archiveView = ref(false)
 const restoring = ref('')
 const input = ref<HTMLInputElement>()
 const loading = ref(false)
-const busy = ref(false)
-const importing = ref('')
+const actionBusy = ref(false)
+const busy = computed(() => actionBusy.value || imports.running)
 const deleting = ref('')
 const error = ref('')
-const results = ref<{ filename: string; message: string; success: boolean }[]>([])
+const results = computed(() => (imports.job?.library === app.activeLibrary ? imports.job.rows : []))
 const newLibraryName = ref('')
 const creating = ref(false)
 const dragOver = ref(false)
@@ -113,6 +140,8 @@ async function extractImageText(event: Event) {
     extraction.value = result
     extractionName.value = file.name
     extractionPreview.value = URL.createObjectURL(file)
+    await nextTick()
+    extractionDialog.value?.showModal()
   } catch (cause) {
     if (!controller.signal.aborted)
       ocrError.value = cause instanceof Error ? cause.message : t('文字提取失败。')
@@ -131,6 +160,7 @@ async function copyText() {
 onBeforeUnmount(() => {
   ocrController?.abort()
   clearExtraction()
+  generation++
 })
 
 async function load() {
@@ -157,63 +187,42 @@ async function load() {
     if (current === generation) loading.value = false
   }
 }
-async function upload(files: FileList | File[]) {
+function closeAddMenu() {
+  document.getElementById('library-add-menu')?.hidePopover()
+}
+function chooseFiles() {
+  closeAddMenu()
+  input.value?.click()
+}
+function chooseOCR() {
+  closeAddMenu()
+  ocrInput.value?.click()
+}
+async function chooseFolder() {
+  closeAddMenu()
+  foldersOpen.value = true
+  await nextTick()
+  folderPanel.value?.chooseFolder()
+}
+function upload(files: FileList | File[]) {
   if (busy.value || !app.health) return
   if (app.capabilities?.embedding.ready === false) {
     error.value = t('本地检索模型尚未准备，请先完成模型下载。图片识字可以独立使用。')
     return
   }
-  const library = app.activeLibrary
-  busy.value = true
-  results.value = []
-  for (const file of Array.from(files)) {
-    importing.value = file.name
-    try {
-      if (
-        file.size >
-        (/\.(wav|mp3|m4a|aac|flac|ogg|mp4|mov|mkv|webm)$/i.test(file.name) ? 200 : 20) * 1024 * 1024
-      )
-        throw new Error(t('文档和图片上限 20 MB，音视频上限 200 MB。'))
-      if (
-        !/\.(txt|md|pdf|docx|png|jpe?g|webp|wav|mp3|m4a|aac|flac|ogg|mp4|mov|mkv|webm)$/i.test(
-          file.name,
-        )
-      )
-        throw new Error(t('不支持此文件格式。'))
-      const result = await api.ingest(library, file)
-      results.value.push({
-        filename: file.name,
-        message: result.duplicate
-          ? t('已存在，跳过重复导入')
-          : result.document.kind === 'image'
-            ? `${t('图片已索引')} · ${ocrLabel(result.document.ocr_status)}${result.document.ocr_message ? '：' + result.document.ocr_message : ''}`
-            : preferences.values.language === 'en-US'
-              ? `Imported ${result.document.chunks} excerpts`
-              : `已导入 ${result.document.chunks} 个片段`,
-        success: true,
-      })
-    } catch (cause) {
-      results.value.push({
-        filename: file.name,
-        message: cause instanceof Error ? cause.message : t('导入失败'),
-        success: false,
-      })
-    }
-  }
-  busy.value = false
-  importing.value = ''
-  try {
-    await app.refreshLibraries()
-    await load()
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('无法刷新知识库。')
-  }
+  void imports.start(app.activeLibrary, Array.from(files))
 }
 function selectFiles(event: Event) {
   const target = event.target as HTMLInputElement
-  if (target.files) void upload(target.files)
+  if (target.files) upload(Array.from(target.files))
   target.value = ''
 }
+watch(
+  () => imports.revision,
+  () => {
+    if (imports.job?.library === app.activeLibrary) void refreshFromFolders()
+  },
+)
 async function refreshFromFolders() {
   try {
     await app.refreshLibraries()
@@ -244,7 +253,7 @@ function requestArchive(all = false) {
 async function confirmArchive() {
   const pending = pendingArchive.value
   if (!pending || busy.value) return
-  busy.value = true
+  actionBusy.value = true
   error.value = ''
   actionNotice.value = ''
   try {
@@ -269,13 +278,13 @@ async function confirmArchive() {
     if (app.activeLibrary === pending.library)
       error.value = cause instanceof Error ? cause.message : t('批量移入失败。')
   } finally {
-    busy.value = false
+    actionBusy.value = false
   }
 }
 async function undoArchive() {
   const previous = lastArchive.value
   if (!previous || busy.value || previous.library !== app.activeLibrary) return
-  busy.value = true
+  actionBusy.value = true
   error.value = ''
   try {
     await api.restoreDocuments(previous.library, previous.ids)
@@ -289,15 +298,50 @@ async function undoArchive() {
     if (app.activeLibrary === previous.library)
       error.value = cause instanceof Error ? cause.message : t('恢复失败。')
   } finally {
-    busy.value = false
+    actionBusy.value = false
+  }
+}
+let dragDepth = 0
+function clearLibrary() {
+  closeActionsMenu()
+  requestArchive(true)
+}
+function showLibraryCreation() {
+  creating.value = true
+  closeActionsMenu()
+}
+function toggleFolderSources() {
+  foldersOpen.value = !foldersOpen.value
+  closeActionsMenu()
+}
+function closeActionsMenu() {
+  document.getElementById('library-actions-menu')?.hidePopover()
+}
+function isFileDrag(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+}
+function enterDrag(event: DragEvent) {
+  if (isFileDrag(event) && !busy.value) {
+    dragDepth++
+    dragOver.value = true
+  }
+}
+function holdDrag(event: DragEvent) {
+  if (isFileDrag(event) && !busy.value) dragOver.value = true
+}
+function leaveDrag(event: DragEvent) {
+  if (isFileDrag(event)) {
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (!dragDepth) dragOver.value = false
   }
 }
 function drop(event: DragEvent) {
+  dragDepth = 0
   dragOver.value = false
   if (event.dataTransfer?.files) void upload(event.dataTransfer.files)
 }
 async function remove(document: Document) {
-  busy.value = true
+  actionBusy.value = true
   try {
     await api.archiveDocument(app.activeLibrary, document.id)
     await app.refreshLibraries()
@@ -305,13 +349,13 @@ async function remove(document: Document) {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('删除失败。')
   } finally {
-    busy.value = false
+    actionBusy.value = false
     deleting.value = ''
   }
 }
 async function restore(document: Document) {
   if (busy.value) return
-  busy.value = true
+  actionBusy.value = true
   restoring.value = document.id
   try {
     await api.restoreDocument(app.activeLibrary, document.id)
@@ -320,13 +364,13 @@ async function restore(document: Document) {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('恢复失败。')
   } finally {
-    busy.value = false
+    actionBusy.value = false
     restoring.value = ''
   }
 }
 async function createLibrary() {
   if (!newLibraryName.value.trim()) return
-  busy.value = true
+  actionBusy.value = true
   try {
     const library = await api.createLibrary(newLibraryName.value.trim())
     await app.refreshLibraries()
@@ -336,7 +380,7 @@ async function createLibrary() {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('创建失败。')
   } finally {
-    busy.value = false
+    actionBusy.value = false
   }
 }
 function formatSize(size: number) {
@@ -377,7 +421,6 @@ watch(
     documents.value = []
     archived.value = []
     deleting.value = ''
-    results.value = []
     archiveView.value = false
     if (app.health) void load()
   },
@@ -385,21 +428,116 @@ watch(
 </script>
 
 <template>
-  <section class="standard-page">
+  <section
+    class="standard-page library-page"
+    :class="{ 'is-dragging': dragOver }"
+    @dragenter.prevent="enterDrag"
+    @dragover.prevent="holdDrag"
+    @dragleave.prevent="leaveDrag"
+    @drop.prevent="drop"
+  >
     <header class="page-header">
       <div>
-        <h1>{{ t('我的知识库') }}</h1>
-        <p class="page-subtitle">{{ t('收集、检索和管理你的本地资料') }}</p>
+        <h1>{{ libraryName(app.activeLibrary, app.currentLibrary?.name ?? t('我的知识库')) }}</h1>
+        <p v-if="loading" class="page-subtitle">{{ t('正在读取资料…') }}</p>
+        <p v-else class="page-subtitle library-summary">
+          {{ documents.length }} {{ t('份资料') }}<span>·</span
+          >{{ app.currentLibrary?.chunks ?? 0 }} {{ t('个片段') }}<span>·</span
+          >{{ formatSize(totalSize) }}
+        </p>
       </div>
-      <button
-        class="button secondary small"
-        :disabled="busy || !app.health"
-        @click="creating = !creating"
+      <div class="library-header-actions">
+        <button
+          type="button"
+          class="button primary small"
+          :disabled="busy || !app.health"
+          popovertarget="library-add-menu"
+          style="anchor-name: --library-add"
+        >
+          <Plus :size="16" />{{ t('添加资料') }}<ChevronDown :size="13" />
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          :aria-label="t('知识库操作')"
+          popovertarget="library-actions-menu"
+          style="anchor-name: --library-actions"
+        >
+          <MoreHorizontal :size="19" />
+        </button>
+      </div>
+      <div
+        id="library-add-menu"
+        popover="auto"
+        class="library-menu"
+        style="position-anchor: --library-add"
       >
-        <FolderPlus :size="16" />{{ t('新建知识库') }}
-      </button>
+        <button type="button" @click="chooseFiles">
+          <Upload :size="17" /><span
+            ><strong>{{ t('导入文件') }}</strong
+            ><small>{{ t('文档、图片、音频和视频') }}</small></span
+          >
+        </button>
+        <button type="button" :disabled="!folderAvailable" @click="chooseFolder">
+          <FolderPlus :size="17" /><span
+            ><strong>{{ t('连接文件夹') }}</strong
+            ><small>{{ t(folderAvailable ? '同步整个笔记目录' : '在桌面应用中使用') }}</small></span
+          >
+        </button>
+        <button
+          type="button"
+          :disabled="ocrBusy || !app.capabilities?.ocr.available"
+          @click="chooseOCR"
+        >
+          <ScanText :size="17" /><span
+            ><strong>{{ t('提取图片文字') }}</strong
+            ><small>{{ t('本地识字，无需检索模型') }}</small></span
+          >
+        </button>
+        <p>{{ t('文件仅在本机处理。文档和图片 20 MB，音视频 200 MB / 60 分钟。') }}</p>
+      </div>
+      <div
+        id="library-actions-menu"
+        popover="auto"
+        class="library-menu library-management-menu"
+        style="position-anchor: --library-actions"
+      >
+        <button type="button" :disabled="busy || !app.health" @click="showLibraryCreation">
+          <FolderPlus :size="16" />{{ t('新建知识库') }}
+        </button>
+        <button type="button" @click="toggleFolderSources">
+          <FolderOpen :size="16" />{{ t('管理文件夹来源') }}
+        </button>
+        <button
+          type="button"
+          class="danger"
+          :disabled="busy || loading || !documents.length"
+          @click="clearLibrary"
+        >
+          <Trash2 :size="16" />{{ t('清空全部资料') }}
+        </button>
+      </div>
     </header>
-    <div class="page-content">
+    <input
+      ref="input"
+      class="hidden"
+      type="file"
+      accept=".txt,.md,.pdf,.docx,.png,.jpg,.jpeg,.webp,.wav,.mp3,.m4a,.aac,.flac,.ogg,.mp4,.mov,.mkv,.webm"
+      multiple
+      @change="selectFiles"
+    />
+    <input
+      ref="ocrInput"
+      class="hidden"
+      type="file"
+      accept=".png,.jpg,.jpeg,.webp"
+      @change="extractImageText"
+    />
+    <div v-if="dragOver" class="library-drop-overlay">
+      <Upload :size="28" /><strong>{{ t('松开以导入当前知识库') }}</strong
+      ><span>{{ t('文档、图片、音频和视频') }}</span>
+    </div>
+    <div class="page-content library-content">
       <form v-if="creating" class="inline-form" @submit.prevent="createLibrary">
         <input
           v-model="newLibraryName"
@@ -418,135 +556,55 @@ watch(
           <X :size="18" />
         </button>
       </form>
-      <div class="section-intro">
-        <div>
-          <h2>{{ libraryName(app.activeLibrary, app.currentLibrary?.name ?? t('我的知识库')) }}</h2>
-          <p>{{ t('把资料收集在这里，答案就有了依据。') }}</p>
-        </div>
-        <div class="library-stats">
-          <div>
-            <strong>{{ documents.length }}</strong
-            ><span>{{ t('份资料') }}</span>
-          </div>
-          <div>
-            <strong>{{ app.currentLibrary?.chunks ?? 0 }}</strong
-            ><span>{{ t('个片段') }}</span>
-          </div>
-          <div>
-            <strong>{{ formatSize(totalSize) }}</strong
-            ><span>{{ t('原文大小') }}</span>
-          </div>
-        </div>
-      </div>
-
-      <FolderSourcesPanel @changed="refreshFromFolders" />
-
-      <div
-        class="upload-zone"
-        :class="{ dragging: dragOver, 'is-busy': busy }"
-        @dragover.prevent="dragOver = true"
-        @dragleave.prevent="dragOver = false"
-        @drop.prevent="drop"
-      >
-        <div class="upload-icon">
-          <LoaderCircle v-if="busy" class="spin" :size="25" /><Upload v-else :size="25" />
-        </div>
-        <h3>
-          {{
-            importing
-              ? preferences.values.language === 'en-US'
-                ? `Processing ${importing}`
-                : `正在处理 ${importing}`
-              : t('拖入文档、图片、音频或视频')
-          }}
-        </h3>
-        <p>
-          {{
-            importing
-              ? t('模型加载与资料处理在本机进行，请稍候。')
-              : t('文档和图片上限 20 MB；音视频上限 200 MB / 60 分钟')
-          }}
-        </p>
-        <button class="button primary" :disabled="busy || !app.health" @click="input?.click()">
-          <Upload :size="16" />{{ t('选择文件') }}</button
-        ><input
-          ref="input"
-          class="hidden"
-          type="file"
-          accept=".txt,.md,.pdf,.docx,.png,.jpg,.jpeg,.webp,.wav,.mp3,.m4a,.aac,.flac,.ogg,.mp4,.mov,.mkv,.webm"
-          multiple
-          @change="selectFiles"
-        /><span class="upload-footnote">{{ t('解析、切片与嵌入均在本地完成') }}</span>
-      </div>
-
       <div v-if="app.capabilities?.embedding.ready === false" class="model-preparation-note">
-        <span>{{ t('本地检索模型尚未准备，暂时无法入库。可以先使用下方的图片识字。') }}</span
+        <span>{{ t('本地检索模型尚未准备，暂时无法入库。图片识字仍可使用。') }}</span
         ><button class="text-button" @click="app.refreshCapabilities">
           {{ t('检查准备状态') }}
         </button>
       </div>
       <div v-if="error" role="alert" class="inline-error">{{ error }}</div>
-      <div class="ocr-tool">
-        <div>
-          <strong>{{ t('提取图片文字') }}</strong>
-          <p>{{ t('在本机读取截图和票据，不需要等待嵌入模型。') }}</p>
-        </div>
-        <button
-          class="button secondary small"
-          :disabled="ocrBusy || !app.health || !app.capabilities?.ocr.available"
-          @click="ocrInput?.click()"
-        >
-          <LoaderCircle v-if="ocrBusy" class="spin" :size="16" />{{
-            ocrBusy ? t('正在提取…') : t('选择图片识字')
-          }}</button
-        ><input
-          ref="ocrInput"
-          class="hidden"
-          type="file"
-          accept=".png,.jpg,.jpeg,.webp"
-          @change="extractImageText"
-        />
-      </div>
-      <div v-if="ocrError" class="inline-error" role="alert">{{ ocrError }}</div>
-      <section v-if="extraction" class="ocr-extraction">
-        <div class="ocr-extraction-header">
-          <strong>{{ extractionName }} · {{ ocrLabel(extraction.status) }}</strong
-          ><button
-            class="icon-button"
-            type="button"
-            :aria-label="t('关闭识字结果')"
-            @click="clearExtraction"
+      <div v-if="ocrError" role="alert" class="inline-error">{{ ocrError }}</div>
+      <p v-if="ocrBusy" class="library-ocr-status" role="status">
+        <LoaderCircle class="spin" :size="15" />{{ t('正在提取图片文字…') }}
+      </p>
+      <TaskFeedback v-if="importTask" :task="importTask" />
+      <details v-if="results.length" class="library-import-details">
+        <summary>{{ t('查看逐文件结果') }} · {{ results.length }}</summary>
+        <div class="import-results">
+          <div
+            v-for="(result, i) in results"
+            :key="i"
+            :class="{ failed: result.state === 'error' }"
           >
-            <X :size="16" />
-          </button>
-        </div>
-        <div class="ocr-extraction-body">
-          <img :src="extractionPreview" :alt="extractionName" />
-          <div>
-            <textarea
-              v-if="extraction.text"
-              :value="extraction.text"
-              rows="6"
-              :aria-label="t('图片识别文字')"
-              readonly
-            ></textarea>
-            <p v-else>
-              {{ extraction.message || t('没有识别到可用文字。照片可通过视觉模型进一步解读。') }}
-            </p>
-            <button v-if="extraction.text" class="text-button" @click="copyText">
-              {{ copied ? t('已复制') : t('复制文字') }}
-            </button>
+            <Check v-if="result.state === 'success'" :size="15" /><X
+              v-else-if="result.state === 'error'"
+              :size="15"
+            /><LoaderCircle
+              v-else-if="result.state === 'running'"
+              class="spin"
+              :size="15"
+            /><FileText v-else :size="15" /><strong>{{ result.name }}</strong
+            ><span>{{
+              result.message || t(result.state === 'running' ? '处理中' : '待处理')
+            }}</span>
           </div>
         </div>
-      </section>
-      <div v-if="results.length" class="import-results">
-        <div v-for="(result, i) in results" :key="i" :class="{ failed: !result.success }">
-          <Check v-if="result.success" :size="16" /><X v-else :size="16" /><strong>{{
-            result.filename
-          }}</strong
-          ><span>{{ result.message }}</span>
-        </div>
-      </div>
+      </details>
+      <details
+        class="library-source-details"
+        :open="foldersOpen"
+        @toggle="foldersOpen = ($event.target as HTMLDetailsElement).open"
+      >
+        <summary>
+          <FolderOpen :size="15" />{{ t('文件夹来源') }}<span>{{ folderSummary }}</span
+          ><ChevronDown :size="14" />
+        </summary>
+        <FolderSourcesPanel
+          ref="folderPanel"
+          @changed="refreshFromFolders"
+          @status="folderStatus = $event"
+        />
+      </details>
       <div class="table-heading">
         <h3>
           <button
@@ -589,16 +647,7 @@ watch(
           <option value="size">{{ t('大小排序') }}</option>
         </select>
       </div>
-      <div v-if="!archiveView && documents.length" class="library-bulk-bar">
-        <label
-          ><input
-            type="checkbox"
-            :checked="allSelected"
-            :indeterminate="partialSelected"
-            :disabled="busy || loading"
-            @change="toggleAll"
-          />{{ t('全选筛选结果') }} <span>{{ visibleDocuments.length }}</span></label
-        >
+      <div v-if="!archiveView && selected.length" class="library-bulk-bar">
         <span class="library-selected-count">{{ t('已选择') }} {{ selected.length }}</span>
         <button v-if="selected.length" class="text-button" :disabled="busy" @click="selected = []">
           {{ t('取消选择') }}
@@ -609,13 +658,7 @@ watch(
             :disabled="!selected.length || busy || loading"
             @click="requestArchive(false)"
           >
-            <Trash2 :size="14" />{{ t('删除所选') }}</button
-          ><button
-            class="button secondary small danger"
-            :disabled="busy || loading || !app.health"
-            @click="requestArchive(true)"
-          >
-            {{ t('清空全部资料') }}
+            <Trash2 :size="14" />{{ t('删除所选') }}
           </button>
         </div>
       </div>
@@ -658,14 +701,30 @@ watch(
       </template>
       <div v-else-if="!documents.length" class="empty-state">
         <FileText :size="28" /><strong>{{ t('这里还没有资料') }}</strong>
-        <p>{{ t('导入文档或图片后，可以在本地助手中查找和引用。') }}</p>
+        <p>{{ t('拖入文件，或通过添加资料连接你的笔记文件夹。') }}</p>
+        <button
+          type="button"
+          class="button primary small"
+          :disabled="busy || !app.health"
+          @click="chooseFiles"
+        >
+          <Plus :size="15" />{{ t('导入第一份资料') }}
+        </button>
       </div>
       <div v-else-if="!visibleDocuments.length" class="empty-state">
         <FileText :size="26" /><strong>{{ t('没有匹配的资料') }}</strong>
       </div>
       <div v-else class="document-table">
         <div class="document-table-head">
-          <span>{{ t('资料名称') }}</span
+          <label class="document-select-all"
+            ><input
+              type="checkbox"
+              :checked="allSelected"
+              :indeterminate="partialSelected"
+              :disabled="busy || loading"
+              :aria-label="t('全选筛选结果')"
+              @change="toggleAll"
+            />{{ t('资料名称') }}</label
           ><span>{{ t('片段') }}</span
           ><span>{{ t('导入时间') }}</span
           ><span></span>
@@ -712,11 +771,10 @@ watch(
                 }}<template v-if="document.kind === 'image'">
                   · {{ document.width }} × {{ document.height }} ·
                   {{ ocrLabel(document.ocr_status) }}</template
+                ><template v-if="document.duration">
+                  · {{ document.duration.toFixed(1) }} {{ t('秒') }} ·
+                  {{ t(document.kind === 'audio' ? '音频' : '视频') }}</template
                 ></span
-              >
-              <span v-if="document.duration"
-                >{{ document.duration.toFixed(1) }} {{ t('秒') }} ·
-                {{ t(document.kind === 'audio' ? '音频' : '视频') }}</span
               >
               <MediaPreview
                 v-if="['audio', 'video', 'bundle'].includes(document.kind)"
@@ -765,6 +823,47 @@ watch(
         </button>
       </nav>
     </div>
+    <dialog
+      ref="extractionDialog"
+      class="action-dialog library-ocr-dialog"
+      :aria-label="t('图片识字结果')"
+      @close="clearExtraction"
+    >
+      <section v-if="extraction" class="ocr-extraction">
+        <div class="ocr-extraction-header">
+          <strong>{{ extractionName }} · {{ ocrLabel(extraction.status) }}</strong
+          ><button
+            class="icon-button"
+            type="button"
+            :aria-label="t('关闭识字结果')"
+            @click="extractionDialog?.close()"
+          >
+            <X :size="16" />
+          </button>
+        </div>
+        <p v-if="extraction.engine" class="semantic-footnote">
+          {{ t('识别引擎') }}：{{ extraction.engine }}
+        </p>
+        <div class="ocr-extraction-body">
+          <img :src="extractionPreview" :alt="extractionName" />
+          <div>
+            <textarea
+              v-if="extraction.text"
+              :value="extraction.text"
+              rows="6"
+              :aria-label="t('图片识别文字')"
+              readonly
+            ></textarea>
+            <p v-else>
+              {{ extraction.message || t('没有识别到可用文字。照片可通过视觉模型进一步解读。') }}
+            </p>
+            <button v-if="extraction.text" class="text-button" @click="copyText">
+              {{ copied ? t('已复制') : t('复制文字') }}
+            </button>
+          </div>
+        </div>
+      </section>
+    </dialog>
     <dialog
       ref="bulkDialog"
       class="action-dialog library-bulk-dialog"
