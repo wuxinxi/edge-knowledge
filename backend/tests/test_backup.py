@@ -91,6 +91,20 @@ def test_roundtrip_preserves_indexes_images_ocr_originals_and_archive(backups):
     assert result["frontend"] == frontend
 
 
+def test_engine_provenance_survives_backup_restore(backups):
+    knowledge, _, service = backups
+    document = next(doc for doc in knowledge.repository.documents("default") if doc.kind == "image")
+    image, ocr = knowledge.images.assets.snapshot("default", document.id)
+    knowledge.images.assets.put(
+        "default", document.id, image, replace(ocr, engine="RapidOCR · ONNX Runtime")
+    )
+    restored = service.restore(service.export({}))["mapping"]["default"]
+    assert (
+        knowledge.images.assets.snapshot(restored, document.id)[1].engine
+        == "RapidOCR · ONNX Runtime"
+    )
+
+
 def test_wrong_model_and_corruption_do_not_create_libraries(backups):
     knowledge, _, service = backups
     data = service.export({})

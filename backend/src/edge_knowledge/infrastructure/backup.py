@@ -92,7 +92,7 @@ class ReferenceValue(StrictModel):
 class SourceValue(StrictModel):
     document_id: str = Field(min_length=1, max_length=100)
     filename: str = Field(min_length=1, max_length=255)
-    text: str = Field(max_length=200000)
+    text: str
     section: str = Field(max_length=20000)
     index: int = Field(ge=0)
     score: float = Field(ge=-1, le=1)
@@ -102,30 +102,47 @@ class SourceValue(StrictModel):
     end: float | None = Field(default=None, ge=0)
 
 
+class AnswerVersionValue(StrictModel):
+    content: str
+    sources: list[SourceValue]
+    error: str | None = None
+    notice: str | None = None
+    savedAt: str
+    planner: Literal["local", "local_model", "deepseek"] | None = None
+    generator: Literal["local", "deepseek"] | None = None
+
+
 class MessageValue(StrictModel):
     id: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]
-    content: str = Field(max_length=200000)
+    content: str
     sources: list[SourceValue] = Field(max_length=50)
     references: list[ReferenceValue] | None = Field(default=None, max_length=10)
     mode: Literal["search", "chat"] | None = None
     error: str | None = Field(default=None, max_length=2000)
     notice: str | None = Field(default=None, max_length=4000)
 
+    status: Literal["streaming", "complete", "stopped", "error"] | None = None
+    versions: list[AnswerVersionValue] | None = None
+    queryPlan: dict | None = None
+    planner: Literal["local", "local_model", "deepseek"] | None = None
+    generator: Literal["local", "deepseek"] | None = None
+
 
 class ConversationValue(StrictModel):
     id: str = Field(min_length=1, max_length=100)
     library: str = Field(min_length=1, max_length=100)
     title: str = Field(max_length=80)
+    titleSource: Literal["auto", "manual"] | None = None
     createdAt: str = Field(max_length=100)
     updatedAt: str = Field(max_length=100)
-    messages: list[MessageValue] = Field(max_length=2000)
+    messages: list[MessageValue]
     references: list[ReferenceValue] = Field(max_length=10)
 
 
 class ChatsValue(StrictModel):
     version: Literal[1]
-    sessions: list[ConversationValue] = Field(max_length=500)
+    sessions: list[ConversationValue]
     active: dict[str, str] = Field(default_factory=dict)
 
 
@@ -133,8 +150,8 @@ def frontend_data(value: dict) -> dict:
     # Credentials, filesystem grants and backend configuration are never portable.
     if not isinstance(value, dict) or set(value) - {"chats", "preferences"}:
         raise AppError("备份界面数据无效。", 422, "invalid_backup")
-    if len(json.dumps(value, ensure_ascii=False).encode()) > 3 * 1024 * 1024:
-        raise AppError("对话与界面偏好备份不能超过 3 MB，请先分开导出较长对话。", 413)
+    if len(json.dumps(value, ensure_ascii=False).encode()) > 64 * 1024 * 1024:
+        raise AppError("对话与界面偏好备份不能超过 64 MB，请先分开导出较长对话。", 413)
     for key, item in value.items():
         if item is not None and not isinstance(item, dict):
             raise AppError("备份界面数据无效。", 422, "invalid_backup")
