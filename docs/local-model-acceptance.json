@@ -1,0 +1,63 @@
+{
+  "scope": "Real local model + real embedding, isolated synthetic corpus; no cloud calls",
+  "cases": {
+    "grouped_month_count": {
+      "seconds": 1.47,
+      "count": 2,
+      "missing_dates_reported": true,
+      "planner": "local_model",
+      "plan": {
+        "operation": "aggregate",
+        "where": {
+          "all": [
+            {
+              "all": []
+            },
+            {
+              "field": "created_date",
+              "op": "gte",
+              "value": "2026-09-01"
+            },
+            {
+              "field": "created_date",
+              "op": "lt",
+              "value": "2026-10-01"
+            },
+            {
+              "field": "kind",
+              "op": "eq",
+              "value": "document"
+            }
+          ]
+        },
+        "metric": "count",
+        "metric_field": "size",
+        "group_by": "tags",
+        "group_date": "authored_date",
+        "order_by": "title",
+        "descending": false,
+        "limit": 20,
+        "offset": 0,
+        "text_query": "",
+        "clarification": "",
+        "version": 1
+      }
+    },
+    "missing_year": "clarified_without_model_or_cloud",
+    "find_deployment": {
+      "filenames": ["部署流程.md"],
+      "location": "local"
+    },
+    "local_summary": {
+      "seconds": 1.55,
+      "answer": "根据提供的资料，部署步骤如下：\n1. 安装项目依赖。\n2. 启动本地服务。\n3. 检查服务健康状态。\n[1]",
+      "generator": "local"
+    },
+    "find_image": {
+      "matches": 1,
+      "kind": "image",
+      "location": "local"
+    }
+  },
+  "load_seconds": 2.22
+}

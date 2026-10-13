@@ -77,6 +77,7 @@ class TestGenerator:
 @pytest.fixture
 def system(tmp_path):
     settings = JsonSettingsStore(tmp_path, credentials=MemoryCredentials())
+    settings.update({"generation_provider": "deepseek"})
     repository = ChromaKnowledgeRepository(tmp_path / "chroma", "test-model")
     payloads = FilePayloadStore(tmp_path / "payloads")
     catalog = CatalogMirror(

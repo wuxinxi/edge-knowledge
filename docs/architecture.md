@@ -201,3 +201,7 @@ Electron 的后端路径解析独立为纯路径函数，Windows 开发模式使
 CatalogMirror 通过 MetadataReader 和 DocumentCatalog 端口维护派生索引，IndexedKnowledgeRepository 覆盖所有资料写入入口，包括归档与备份恢复。SQLite 保存标准日期、自定义标量、标签和已解析文字；迁移不重新嵌入，也不扩展授权目录访问。
 
 元数据执行与语义检索共用校验后的文档范围，媒体类型由选定记录决定。COUNT/SUM/AVG/MIN/MAX、组合筛选、分组与排序由本机执行，不接收模型生成的 SQL 或统计答案。查询条件及规划来源随现有会话持久化与备份保留。完整合同、迁移规则及验证范围见 [通用查询执行](query-engine.md)。
+
+## 本地生成模型与显式云端备选
+
+`LocalModelRuntime` 端口隔离推理进程的状态、加载与关闭。bootstrap 注入 `LlamaRuntime`、`LocalQueryPlanner`、`LocalGenerator` 和 `SelectedGenerator`；子进程、私有认证、loopback HTTP 与 tokenizer 预算均在基础设施层。生成计划保存提供方快照，运行失败不能自动换为云端。查询执行器可在纯本地请求中使用本地规划端口；云端规划仅在明确选择 DeepSeek 与授权 AI 请求时调用。共享日历编译器保留明确年月统计范围，数据库执行受限 QuerySpec，任何模型都不计算全量统计答案。完整运行与发行边界见 [本地模型](local-model.md)。

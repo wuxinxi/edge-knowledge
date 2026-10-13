@@ -1,7 +1,7 @@
 import json
 import logging
 import secrets
-from contextlib import aclosing
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import asdict
 from typing import Annotated
 
@@ -47,7 +47,15 @@ def create_app(
     if not token:
         raise RuntimeError("EDGE_BACKEND_TOKEN is required for a standalone backend.")
 
+    @asynccontextmanager
+    async def lifespan(_app):
+        try:
+            yield
+        finally:
+            await run_in_threadpool(chat.close)
+
     app = FastAPI(
+        lifespan=lifespan,
         title="Edge Knowledge",
         version="0.1.0",
         docs_url=None,
@@ -260,6 +268,10 @@ def create_app(
     @app.patch("/api/settings")
     def update_settings(body: SettingsUpdate):
         return knowledge.settings.update(body.model_dump(exclude_none=True))
+
+    @app.post("/api/local-model/load")
+    async def load_local_model():
+        return await run_in_threadpool(chat.load_local_model)
 
     @app.post("/api/search")
     def search(body: QueryRequest):

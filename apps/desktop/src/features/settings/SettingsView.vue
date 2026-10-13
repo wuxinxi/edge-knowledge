@@ -54,6 +54,21 @@ const settings = ref<Settings>()
 const key = ref('')
 const revealKey = ref(false)
 const saving = ref(false)
+const loadingModel = ref(false)
+async function loadLocalModel() {
+  await save()
+  if (error.value) return
+  loadingModel.value = true
+  try {
+    await api.loadLocalModel()
+    capabilities.value = await api.capabilities()
+    await app.refreshCapabilities()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('本地模型加载失败。')
+  } finally {
+    loadingModel.value = false
+  }
+}
 const saved = ref(false)
 watch(activeSection, () => {
   saved.value = false
@@ -82,6 +97,8 @@ async function load() {
   error.value = ''
   try {
     settings.value = await api.settings()
+    settings.value.generation_provider ??= 'local'
+    settings.value.local_context_size ??= 8192
     capabilities.value = await api.capabilities()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('无法读取设置。')
@@ -101,6 +118,10 @@ async function save(clearKey = false) {
             base_url: current.base_url,
             model: current.model.trim(),
             stream: current.stream,
+            generation_provider: current.generation_provider ?? 'local',
+            local_model_path: current.local_model_path ?? '',
+            local_server_path: current.local_server_path ?? '',
+            local_context_size: current.local_context_size ?? 8192,
           }
         : section === 'images'
           ? { image_qa_mode: current.image_qa_mode }
@@ -208,14 +229,79 @@ onMounted(() => {
               <span class="settings-icon"><Sparkles :size="20" /></span>
               <div>
                 <h2>{{ t('回答生成') }}</h2>
-                <p>{{ t('使用 DeepSeek，把检索到的资料组织成答案。') }}</p>
+                <p>{{ t('本地模型优先理解问题和回答，DeepSeek 可手动选择。') }}</p>
               </div>
               <span v-if="settings.api_key_configured" class="configured-badge"
                 ><Check :size="12" />{{ t('已配置') }}</span
               >
             </div>
             <div class="settings-fields">
-
+              <div class="field">
+                <label for="generation-provider">{{ t('回答方式') }}</label>
+                <select id="generation-provider" v-model="settings.generation_provider">
+                  <option value="local">{{ t('本地模型 · 不上传资料') }}</option>
+                  <option value="deepseek">{{ t('DeepSeek · 云端备选，按账户计费') }}</option>
+                </select>
+                <p>{{ t('本地模型失败时不会自动切换到云端。查找资料始终在本机执行。') }}</p>
+              </div>
+              <template v-if="settings.generation_provider !== 'deepseek'">
+                <div class="field">
+                  <label for="local-model-path">{{ t('GGUF 模型文件') }}</label>
+                  <input
+                    id="local-model-path"
+                    v-model="settings.local_model_path"
+                    placeholder="/absolute/path/model.gguf"
+                    maxlength="4096"
+                  />
+                  <p>{{ t('填写完整文件路径，复用已有权重，不复制或自动下载。') }}</p>
+                </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="local-server-path">{{ t('推理程序路径（可选）') }}</label>
+                    <input
+                      id="local-server-path"
+                      v-model="settings.local_server_path"
+                      placeholder="llama-server"
+                      maxlength="4096"
+                    />
+                    <p>{{ t('留空自动查找 llama-server；找不到时填写完整路径。') }}</p>
+                  </div>
+                  <div class="field">
+                    <label for="local-context">{{ t('本地上下文长度') }}</label>
+                    <select id="local-context" v-model="settings.local_context_size">
+                      <option :value="4096">4096</option>
+                      <option :value="8192">8192</option>
+                      <option :value="16384">16384</option>
+                      <option :value="32768">32768</option>
+                    </select>
+                    <p>{{ t('更长上下文会增加内存使用，不能超过模型实际能力。') }}</p>
+                  </div>
+                </div>
+                <div class="settings-note" role="status">
+                  {{
+                    capabilities?.local_model?.loaded
+                      ? t('本地模型已加载')
+                      : t('首次提问时加载本地模型')
+                  }}
+                  · {{ capabilities?.local_model?.model || t('尚未选择模型') }}
+                  <button
+                    type="button"
+                    class="button"
+                    :disabled="saving || loadingModel"
+                    @click="loadLocalModel"
+                  >
+                    <LoaderCircle v-if="loadingModel" :size="14" class="spin" />{{
+                      t(loadingModel ? '正在加载本地模型…' : '保存并加载模型')
+                    }}
+                  </button>
+                  <p
+                    v-if="capabilities?.local_model && !capabilities.local_model.runtime_available"
+                  >
+                    {{ t('未找到推理程序，请填写 llama-server 完整路径。') }}
+                  </p>
+                </div>
+              </template>
+              <template v-else>
                 <p v-if="settings.credential_message" class="inline-error" role="alert">
                   {{ settings.credential_message
                   }}<span v-if="settings.credential_migration_pending">
@@ -287,6 +373,7 @@ onMounted(() => {
                     </p>
                   </div>
                 </div>
+              </template>
               <label class="toggle-row"
                 ><span
                   ><strong>{{ t('流式显示回答') }}</strong

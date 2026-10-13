@@ -185,3 +185,11 @@ SSE 在 sources 后增加 `execution:{location:"local"|"cloud"}`，描述后续�
 `/api/search` 的原数组响应保留兼容，仍是片段检索接口。新查询端点继续执行认证、库隔离、引用范围校验、图片授权和密钥保护。计划中不能指定其他库或引用集合，不能提供 SQL、执行文件操作或自行返回数量。元数据 count 覆盖全部活动文档，检索 top-k 和结果分页不限制计算总数。
 
 来源与原始会话数据保持完整；会话消息增加可选 queryPlan 和 planner，历史回答保留 planner，旧快照可继续读取。详细字段、日期口径、数据质量和 JSON 示例见 [通用查询执行](query-engine.md)。
+
+## 本地生成模型
+
+Settings 新增 `generation_provider: local|deepseek`（默认 local）、`local_model_path`、`local_server_path` 和 `local_context_size`（2048–32768，默认8192）。文件路径为空或完整绝对路径；模型需 GGUF。路径不表示运行程序已安装或模型已就绪。
+
+`POST /api/local-model/load` 经本地会话认证，加载已配置文件并返回状态；`GET /api/capabilities` 的 `local_model` 显示 configured/model_available/runtime_available/loaded/model/context_size。读取状态不启动推理。
+
+`/api/local-query` 永不调用云端，即使允许规划或设置选择 DeepSeek，也只能使用本地规划器。`/api/query` 默认选择设置的本地生成器，云端需要明确选择 DeepSeek。执行事件保留 `location`，另有 `generator: local|deepseek` 表示是否生成文字，以及 `planner: local_model|deepseek` 表示模型规划来源。本地生成不是纯检索，不能仅按 location=local 把它显示成查找结果。会话和备份保存 generator/planner。

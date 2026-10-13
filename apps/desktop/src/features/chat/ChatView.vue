@@ -23,10 +23,14 @@ const app = useAppStore()
 const { t, preferences, libraryName } = useI18n()
 const chat = useChatStore()
 const question = ref('')
-const mode = ref<'search' | 'chat'>('search')
+const mode = ref<'search' | 'chat'>('chat')
+const localModel = computed(() => app.capabilities?.generator.provider !== 'deepseek')
 const allowImageUpload = ref(false)
 const cloudVision = computed(
-  () => mode.value === 'chat' && app.capabilities?.image_qa_mode === 'cloud_vision',
+  () =>
+    mode.value === 'chat' &&
+    !localModel.value &&
+    app.capabilities?.image_qa_mode === 'cloud_vision',
 )
 const scroller = ref<HTMLElement>()
 const followLatest = ref(true)
@@ -282,7 +286,7 @@ watch(
               :disabled="chat.busy"
               @click="mode = 'chat'"
             >
-              <Sparkles :size="13" />{{ t('AI 解读') }}
+              <Sparkles :size="13" />{{ t(localModel ? '本地助手' : 'DeepSeek 解读') }}
             </button>
           </div>
           <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
@@ -342,7 +346,9 @@ watch(
         {{
           mode === 'search'
             ? t('文档、图片、音视频在本机检索，不调用 DeepSeek。')
-            : cloudVision
+            : localModel
+              ? t('本地模型理解问题并回答，资料与对话不上传。统计由本机执行，不调用 DeepSeek。')
+              : cloudVision
                 ? t('云端看图需要支持图片的模型，并需勾选本次发送图片授权。')
                 : t(
                     'AI 模式可向 DeepSeek 发送问题与查询字段进行规划，统计由本机计算；总结和解读会发送相关文字。',

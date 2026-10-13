@@ -91,6 +91,10 @@ class QueryRequest(StrictBody):
 
 
 class SettingsUpdate(StrictBody):
+    generation_provider: Literal["local", "deepseek"] | None = None
+    local_model_path: str | None = Field(default=None, max_length=4096)
+    local_server_path: str | None = Field(default=None, max_length=4096)
+    local_context_size: int | None = Field(default=None, ge=2048, le=32768)
     api_key: str | None = Field(default=None, max_length=500)
     base_url: str | None = None
     model: str | None = Field(default=None, min_length=1, max_length=100)

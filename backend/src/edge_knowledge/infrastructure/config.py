@@ -17,6 +17,8 @@ class RuntimeConfig(BaseSettings):
     prepared_model_dir: Path | None = None
     deepseek_api_key: str = Field(default="", validation_alias="DEEPSEEK_API_KEY")
     renderer_origin: str = ""
+    local_model_path: Path | None = None
+    local_server_path: Path | None = None
 
     @field_validator("renderer_origin")
     @classmethod

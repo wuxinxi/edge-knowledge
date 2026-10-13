@@ -16,6 +16,10 @@ class UserSettings(BaseModel):
     model: str = Field(default="deepseek-flash", min_length=1, max_length=100)
     image_qa_mode: Literal["local_ocr", "cloud_vision"] = "local_ocr"
     stream: bool = True
+    generation_provider: Literal["local", "deepseek"] = "local"
+    local_model_path: str = Field(default="", max_length=4096)
+    local_server_path: str = Field(default="", max_length=4096)
+    local_context_size: int = Field(default=8192, ge=2048, le=32768)
     top_k: int = Field(default=5, ge=1, le=20)
     min_score: float = Field(default=0.2, ge=-1, le=1)
     chunk_size: int = Field(default=800, ge=100, le=4000)
@@ -30,12 +34,23 @@ class UserSettings(BaseModel):
             raise ValueError("重叠长度必须小于切片长度。")
         if self.model != self.model.strip():
             raise ValueError("模型名不能包含首尾空格。")
+        for name in ("local_model_path", "local_server_path"):
+            value = getattr(self, name)
+            if value and (not Path(value).is_absolute() or "\x00" in value):
+                raise ValueError("本地模型和运行程序需要完整路径。")
+        if self.local_model_path and Path(self.local_model_path).suffix.lower() != ".gguf":
+            raise ValueError("请选择 GGUF 模型文件。")
         return self
 
 
 class JsonSettingsStore:
     def __init__(
-        self, directory: Path, initial_key: str = "", credentials: CredentialStore | None = None
+        self,
+        directory: Path,
+        initial_key: str = "",
+        credentials: CredentialStore | None = None,
+        local_model_path: str = "",
+        local_server_path: str = "",
     ):
         self.path = directory / "settings.json"
         self._lock = RLock()
@@ -46,7 +61,9 @@ class JsonSettingsStore:
         self._credential_error = ""
         self._migration_pending = False
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self._data = UserSettings().model_dump()
+        self._data = UserSettings(
+            local_model_path=local_model_path, local_server_path=local_server_path
+        ).model_dump()
         legacy_present, legacy_key = False, None
         if self.path.exists():
             try:
@@ -59,6 +76,11 @@ class JsonSettingsStore:
                 ):
                     raise ValueError("Invalid credential metadata")
                 self._data = UserSettings.model_validate(saved).model_dump()
+                # Initialize legacy configurations without overwriting an explicit choice.
+                if "local_model_path" not in saved:
+                    self._data["local_model_path"] = local_model_path
+                if "local_server_path" not in saved:
+                    self._data["local_server_path"] = local_server_path
             except (ValueError, TypeError) as exc:
                 raise AppError("本地配置文件无效，请检查 settings.json。", 500) from exc
         try:

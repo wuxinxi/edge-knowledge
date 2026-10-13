@@ -196,6 +196,8 @@ export const api = {
       { method: 'DELETE' },
     ),
   settings: () => json<Settings>('/api/settings'),
+  loadLocalModel: () =>
+    json<NonNullable<Capabilities['local_model']>>('/api/local-model/load', { method: 'POST' }),
   capabilities: (model?: string) =>
     json<Capabilities>('/api/capabilities' + (model ? `?model=${encodeURIComponent(model)}` : '')),
   async imageAsset(library: string, document: string, thumbnail: boolean, signal: AbortSignal) {

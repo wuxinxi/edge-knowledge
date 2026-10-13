@@ -18,7 +18,9 @@ from edge_knowledge.infrastructure.conversations import SQLiteConversationStore
 from edge_knowledge.infrastructure.credentials import SystemCredentialStore
 from edge_knowledge.infrastructure.deepseek import DeepSeekGenerator
 from edge_knowledge.infrastructure.embedding import SentenceTransformerEmbedder
+from edge_knowledge.infrastructure.generators import SelectedGenerator
 from edge_knowledge.infrastructure.images import PillowImageProcessor
+from edge_knowledge.infrastructure.local_llm import LlamaRuntime, LocalGenerator, LocalQueryPlanner
 from edge_knowledge.infrastructure.media import AVMediaDecoder
 from edge_knowledge.infrastructure.metadata import YAMLMetadataReader
 from edge_knowledge.infrastructure.ocr import LocalOCR
@@ -36,6 +38,8 @@ def build_app(config: RuntimeConfig):
         directory,
         config.deepseek_api_key,
         SystemCredentialStore(directory),
+        str(config.local_model_path) if config.local_model_path else "",
+        str(config.local_server_path) if config.local_server_path else "",
     )
     repository = ChromaKnowledgeRepository(directory / "chroma", config.embedding_model)
     prepared = config.prepared_model_dir or directory / "models/embeddinggemma-2"
@@ -73,14 +77,17 @@ def build_app(config: RuntimeConfig):
         payloads,
         archive,
     )
+    runtime = LlamaRuntime(settings)
     chat = ChatService(
         knowledge,
         settings,
-        DeepSeekGenerator(),
+        SelectedGenerator(settings, LocalGenerator(runtime), DeepSeekGenerator()),
         semantic,
         source_store,
         catalog,
         DeepSeekQueryPlanner(settings),
+        LocalQueryPlanner(runtime),
+        runtime,
     )
     backup = BackupService(knowledge, archive, ZipBackupCodec(), config.embedding_model)
     folders = FolderService(
