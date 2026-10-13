@@ -1,0 +1,141 @@
+.task-feedback {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 13px 15px;
+  background: var(--surface);
+  font-size: var(--text-caption);
+}
+.task-feedback-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+.task-feedback-heading strong {
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+.task-feedback-heading > span {
+  color: var(--muted);
+}
+.task-feedback.error,
+.task-feedback.partial {
+  border-color: var(--line-strong);
+}
+.task-feedback.error .task-feedback-heading > svg,
+.task-feedback.partial .task-feedback-heading > svg {
+  color: var(--warning);
+}
+.task-feedback.success .task-feedback-heading > svg {
+  color: var(--green);
+}
+.task-detail {
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  color: var(--muted);
+}
+.task-progress progress {
+  flex: 1;
+  min-width: 0;
+  height: 5px;
+  accent-color: var(--green);
+}
+.task-progress span {
+  flex-shrink: 0;
+}
+.task-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.task-feedback-actions button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--green);
+}
+.task-center {
+  width: min(480px, calc(100vw - 32px));
+  padding: 22px;
+}
+.task-center .dialog-heading p {
+  font-size: var(--text-caption);
+  color: var(--muted);
+  margin: 7px 0 0;
+}
+.task-center-toolbar {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-caption);
+  color: var(--muted);
+  padding: 0 0 14px;
+}
+.task-center-list {
+  display: grid;
+  gap: 16px;
+  max-height: 55dvh;
+  overflow-y: auto;
+}
+.task-center-context {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-caption);
+  color: var(--muted);
+  margin: 0 3px 6px;
+}
+.task-center-note,
+.task-center-empty {
+  font-size: var(--text-caption);
+  color: var(--muted);
+  line-height: 1.6;
+}
+.task-center-note {
+  margin: 16px 0 0;
+}
+.task-center-empty {
+  padding: 30px 16px;
+  text-align: center;
+}
+.task-badge {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-size: 9px;
+  background: var(--green);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+}
+.task-badge.attention {
+  background: var(--warning);
+}
+.task-progress progress {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line);
+}
+.task-progress progress::-webkit-progress-bar {
+  background: var(--line);
+}
+.task-progress progress::-webkit-progress-value {
+  background: var(--green);
+}
+.task-progress progress::-moz-progress-bar {
+  background: var(--green);
+}
