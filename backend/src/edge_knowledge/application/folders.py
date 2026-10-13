@@ -78,7 +78,7 @@ class FolderService:
             if PurePosixPath(path).suffix.lower() in AUDIO | VIDEO:
                 result = self.semantic.ingest(library, path, "", [(path, content)], namespace)
             else:
-                result = self.knowledge.ingest(library, path, content, namespace)
+                result = self.knowledge.ingest(library, path, content, namespace, source_path=path)
             new_id = result["document"]["id"]
             archived_old = False
             try:

@@ -16,7 +16,7 @@ from edge_knowledge.infrastructure.config import RuntimeConfig
 from edge_knowledge.infrastructure.embedding import SentenceTransformerEmbedder
 from edge_knowledge.infrastructure.images import PillowImageProcessor
 from edge_knowledge.infrastructure.media import AVMediaDecoder
-from edge_knowledge.infrastructure.ocr import AppleVisionOCR
+from edge_knowledge.infrastructure.ocr import LocalOCR
 from edge_knowledge.infrastructure.parsers import FileDocumentParser
 from edge_knowledge.infrastructure.payloads import FilePayloadStore
 from edge_knowledge.infrastructure.settings import JsonSettingsStore
@@ -41,7 +41,7 @@ with TemporaryDirectory(prefix="edge-multimodal-check-") as directory:
         repo,
         JsonSettingsStore(root),
         ImageService(
-            PillowImageProcessor(), AppleVisionOCR(), FileAssetStore(root / "assets")
+            PillowImageProcessor(), LocalOCR(), FileAssetStore(root / "assets")
         ),
         payloads,
     )

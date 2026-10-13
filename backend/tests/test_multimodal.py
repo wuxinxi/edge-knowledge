@@ -77,7 +77,7 @@ def multimodal(tmp_path):
     semantic = SemanticService(
         knowledge, embedder, AVMediaDecoder(), payloads, FileArchiveStore(tmp_path / "archive")
     )
-    chat = ChatService(knowledge, settings, TestGenerator())
+    chat = ChatService(knowledge, settings, TestGenerator(), semantic)
     app = create_app(knowledge, chat, "token", semantic=semantic)
     with TestClient(app, headers={"Authorization": "Bearer token"}) as client:
         yield client, semantic, embedder
@@ -174,7 +174,17 @@ def test_actual_audio_video_decoding_and_time_metadata(multimodal):
         assert response.status_code == 201, response.text
         doc = response.json()["document"]
         assert doc["kind"] == kind and 0 < doc["duration"] < 20
-        response = upload(client, "/api/multimodal/search", {"text": "audio", "kinds": [kind]})
+        # This codec test's double has orthogonal text/media vectors, not semantic meaning.
+        response = upload(
+            client,
+            "/api/multimodal/search",
+            {
+                "text": "audio",
+                "kinds": [kind],
+                "match_mode": "broad",
+                "min_score": -1,
+            },
+        )
         hit = response.json()["sources"][0]
         assert hit["end"] == doc["duration"] and hit["start"] == 0
     video = next(call[0] for call in embedder.calls if call[0].frames)
@@ -232,7 +242,7 @@ def test_media_vectors_are_never_cloud_text_evidence(multimodal):
     response = client.post("/api/query", json={"question": "find speech"})
     assert response.status_code == 200
     assert "missing_api_key" not in response.text
-    assert "未将媒体发送到云端" in response.text
+    assert "不调用 DeepSeek" in response.text
 
 
 def test_failed_index_rolls_back_payload(multimodal, monkeypatch):
@@ -264,6 +274,9 @@ def test_failed_index_rolls_back_payload(multimodal, monkeypatch):
         {"top_k": 51},
         {"task": "bad"},
         {"unexpected": "value"},
+        {"match_mode": "invalid"},
+        {"min_score": 1.1},
+        {"min_score": -1.1},
     ],
 )
 def test_multimodal_parameter_validation(multimodal, options):
@@ -311,6 +324,93 @@ def test_image_results_collapse_visual_and_ocr_chunks(multimodal):
     assert result.status_code == 200 and len(result.json()["sources"]) == 1
 
 
+def test_text_image_search_does_not_fill_with_related_screenshots(multimodal, monkeypatch):
+    """Replay the six screenshot scores through the real search endpoint/storage."""
+    from edge_knowledge.domain.models import Chunk, Document
+
+    client, semantic, embedder = multimodal
+    captions = [
+        ("Massive Audio Embedding Benchmark\nMean Score", 0.83),
+        ("Embed Anything\nEmbeddingGemma 2 audio and birds", 0.79),
+        ("EmbeddingGemma 2 中文实测", 0.72),
+        ("Introducing EmbeddingGemma 2 image video audio tasks", 0.72),
+        ("Embedding model architecture", 0.71),
+        ("EmbeddingGemma results", 0.60),
+    ]
+    for index, (caption, score) in enumerate(captions):
+        vector = [score, math.sqrt(1 - score**2)] + [0.0] * 766
+        semantic.knowledge.repository.add(
+            "default",
+            Document(
+                f"image-{index}",
+                f"screenshot-{index}.png",
+                1,
+                1,
+                "now",
+                "image",
+                ocr_status="ready",
+            ),
+            [Chunk(caption, 1, "图片文字")],
+            [vector],
+        )
+    monkeypatch.setattr(embedder, "encode_input", lambda *args: [1.0] + [0.0] * 767)
+    response = upload(
+        client,
+        "/api/multimodal/search",
+        {"text": "Massive Audio Embedding Benchmark", "kinds": ["image"], "top_k": 10},
+    )
+    assert response.status_code == 200
+    assert [hit["document_id"] for hit in response.json()["sources"]] == ["image-0"]
+    assert response.json()["relevance"]["filtered_count"] == 5
+    broad = upload(
+        client,
+        "/api/multimodal/search",
+        {
+            "text": "Massive Audio Embedding Benchmark",
+            "kinds": ["image"],
+            "match_mode": "broad",
+        },
+    )
+    assert len(broad.json()["sources"]) == 6
+    absent = upload(
+        client,
+        "/api/multimodal/search",
+        {
+            "text": "nonexistent benchmark title",
+            "kinds": ["image"],
+            "match_mode": "image_text",
+        },
+    )
+    assert absent.json()["sources"] == []
+
+
+def test_image_text_mode_rejects_media_before_inference(multimodal):
+    client, _, embedder = multimodal
+    response = upload(
+        client,
+        "/api/multimodal/search",
+        {
+            "text": "标题",
+            "kinds": ["image"],
+            "match_mode": "image_text",
+        },
+        [("files", ("a.png", (FIXTURES / "parcel-demo.png").read_bytes()))],
+    )
+    assert response.status_code == 400 and not embedder.calls
+    assert (
+        upload(
+            client,
+            "/api/multimodal/search",
+            {
+                "text": "标题",
+                "kinds": ["video"],
+                "match_mode": "image_text",
+            },
+        ).status_code
+        == 400
+    )
+
+
 def test_variable_frame_timing_keeps_one_frame_per_second():
     from fractions import Fraction
 
@@ -337,3 +437,47 @@ def test_variable_frame_timing_keeps_one_frame_per_second():
     segments = list(AVMediaDecoder().segments(asset))
     # 5.0s and 5.1s occupy the same sampling slot; timestamp gaps must not oversample.
     assert len(segments) == 1 and len(segments[0].frames) == 5
+
+
+def test_chat_image_lookup_is_local_and_uses_focused_image_search(multimodal, monkeypatch):
+    from edge_knowledge.domain.models import Chunk, Document
+
+    client, semantic, embedder = multimodal
+    for identifier, text, score in [
+        ("a" * 64, "Massive Audio Embedding Benchmark", 0.83),
+        ("b" * 64, "Audio embedding tools", 0.79),
+    ]:
+        semantic.knowledge.repository.add(
+            "default",
+            Document(identifier, "chart.png", 1, 1, "now", "image", ocr_status="ready"),
+            [Chunk(text, 1, "图片文字")],
+            [[score, math.sqrt(1 - score**2)] + [0.0] * 766],
+        )
+    monkeypatch.setattr(embedder, "encode_input", lambda *args: [1.0] + [0.0] * 767)
+    # Even a configured unsupported cloud-vision model must not trigger upload/generation guards.
+    client.patch(
+        "/api/settings",
+        json={
+            "api_key": "configured-test-key",
+            "image_qa_mode": "cloud_vision",
+            "model": "deepseek-chat",
+        },
+    )
+    question = "帮我检索Massive Audio Embedding Benchmark图片"
+    local = client.post("/api/search", json={"question": question})
+    assert local.status_code == 200 and [row["document_id"] for row in local.json()] == ["a" * 64]
+    response = client.post("/api/query", json={"question": question})
+    assert response.status_code == 200
+    events = [
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+    ]
+    assert {"type": "execution", "location": "local"} in events
+    assert [row["document_id"] for row in events[0]["sources"]] == ["a" * 64]
+    other = client.post("/api/libraries", json={"name": "other"}).json()["id"]
+    assert (
+        client.post(
+            "/api/query",
+            json={"question": question, "library_id": other, "document_ids": ["a" * 64]},
+        ).status_code
+        == 404
+    )

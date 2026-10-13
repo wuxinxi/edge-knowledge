@@ -36,7 +36,14 @@ class KnowledgeService:
         with self._lock:
             yield
 
-    def ingest(self, library_id: str, filename: str, content: bytes, namespace: str = "") -> dict:
+    def ingest(
+        self,
+        library_id: str,
+        filename: str,
+        content: bytes,
+        namespace: str = "",
+        source_path: str = "",
+    ) -> dict:
         filename = PurePosixPath(filename.replace("\\", "/")).name
         if not filename or len(filename) > 255:
             raise AppError("文件名不合法。")
@@ -69,7 +76,12 @@ class KnowledgeService:
                 ]
             embeddings = self.embedder.documents([chunk.text for chunk in chunks])
             document = Document(
-                doc_id, filename, len(chunks), len(content), datetime.now(UTC).isoformat()
+                doc_id,
+                filename,
+                len(chunks),
+                len(content),
+                datetime.now(UTC).isoformat(),
+                source_path=source_path,
             )
             if self.payloads:
                 self.payloads.put(

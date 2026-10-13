@@ -6,7 +6,7 @@
 
 - `ImageService` 只依赖图像处理、OCR 和素材存储端口。
 - `PillowImageProcessor` 校验真实图片格式，处理方向、透明背景和缩略图，移除 EXIF 等元数据；单边最多 8192 像素，总像素最多 2400 万。
-- `AppleVisionOCR` 使用 macOS 系统 Vision，在本机提取中文/英文文字与归一化区域位置。OCR 不可用或识别失败时明确记录状态，不编造文字。
+- `LocalOCR` 优先 macOS 系统 Vision；Windows/Linux 或系统识别失败时使用随依赖安装的 RapidOCR/ONNX Runtime 本地模型，提取中文/英文文字与归一化区域位置。OCR 不可用或识别失败时明确记录状态，不编造文字、不自动上传。设置与独立识字结果显示引擎，详见 [跨平台本地 OCR](local-ocr.md)。
 - `KnowledgeService` 将图片向量与 OCR 文字片段写入同一模型的本地索引，并对图片搜索结果去重。入库失败会清理本次素材，删除资料会删除索引及图片文件。
 - `FileAssetStore` 在应用数据目录保存规范化 PNG、缩略图和 OCR 区域记录。API 只能访问当前知识库内存在的图片，图片接口同样需要会话认证。
 - `ChatService` 负责判断生成模型能力、选择证据、检查本次授权和限制图片数量。DeepSeek 适配器只负责组装请求及转发响应。

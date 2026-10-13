@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from threading import RLock
 
+from edge_knowledge.domain.media_relevance import DEFAULT_MEDIA_MINIMUM, select_media_hits
 from edge_knowledge.domain.models import AppError, Asset, Chunk, Document
 from edge_knowledge.domain.multimodal import (
     EmbeddingInput,
@@ -190,6 +191,8 @@ class SemanticService:
         kinds: list[str],
         task: str,
         dimension: int,
+        match_mode: str = "auto",
+        min_score: float = DEFAULT_MEDIA_MINIMUM,
     ) -> dict:
         # Validate membership before decoding or inference.
         with self.knowledge.transaction():
@@ -197,6 +200,8 @@ class SemanticService:
             if ids and not set(ids) <= {doc.id for doc in docs}:
                 raise AppError("引用资料已删除或不属于当前知识库。", 404, "reference_not_found")
             text, assets = self.inputs(text, files)
+            if match_mode == "image_text" and (assets or kinds != ["image"]):
+                raise AppError("图片内文字匹配仅支持文字查询与图片结果。")
             vectors, budgets = [], []
             for item in self.segments(text, assets, task):
                 budget = self.embedder.budget(item, task)
@@ -210,19 +215,22 @@ class SemanticService:
                 if ids and hit.document_id not in ids or kinds and hit.kind not in kinds:
                     continue
                 hits.append(replace(hit, score=round(cosine(query, unit(vector, dimension)), 4)))
-            hits.sort(key=lambda hit: (-hit.score, hit.document_id, hit.index))
-            filtered, seen_images = [], set()
-            for hit in hits:
-                if hit.kind == "image" and hit.document_id in seen_images:
-                    continue
-                if hit.kind == "image":
-                    seen_images.add(hit.document_id)
-                filtered.append(hit)
+            filtered, strategy, candidate_count = select_media_hits(
+                text, hits, min_score, match_mode, not assets
+            )
             return {
                 "sources": [asdict(hit) for hit in filtered[:top_k]],
                 "budget": {"limit": 8192, "max_tokens": max(budgets), "segments": len(vectors)},
                 "dimension": dimension,
                 "aggregation": "joint" if len(vectors) == 1 else "mean_of_segments",
+                "relevance": {
+                    "mode": match_mode,
+                    "strategy": strategy,
+                    "min_score": min_score,
+                    "candidate_count": candidate_count,
+                    "matched_count": len(filtered),
+                    "filtered_count": candidate_count - len(filtered),
+                },
             }
 
     def archived(self, library: str) -> list[dict]:

@@ -11,7 +11,7 @@ from edge_knowledge.infrastructure.chroma import ChromaKnowledgeRepository
 from edge_knowledge.infrastructure.config import RuntimeConfig
 from edge_knowledge.infrastructure.embedding import SentenceTransformerEmbedder
 from edge_knowledge.infrastructure.images import PillowImageProcessor
-from edge_knowledge.infrastructure.ocr import AppleVisionOCR
+from edge_knowledge.infrastructure.ocr import LocalOCR
 from edge_knowledge.infrastructure.parsers import FileDocumentParser
 from edge_knowledge.infrastructure.settings import JsonSettingsStore
 
@@ -32,7 +32,7 @@ with TemporaryDirectory(prefix="edge-assistant-model-check-") as directory:
         repository,
         JsonSettingsStore(path),
         ImageService(
-            PillowImageProcessor(), AppleVisionOCR(), FileAssetStore(path / "assets")
+            PillowImageProcessor(), LocalOCR(), FileAssetStore(path / "assets")
         ),
     )
     knowledge.ingest(

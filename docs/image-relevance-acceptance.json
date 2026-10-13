@@ -1,0 +1,77 @@
+{
+  "query": "Massive Audio Embedding Benchmark",
+  "expected": "DM_20261012132238_001.png",
+  "corpus_size": 6,
+  "cases": {
+    "broad": {
+      "hits": [
+        {
+          "filename": "DM_20261012132238_001.png",
+          "score": 0.8264
+        },
+        {
+          "filename": "DM_20261012132239_001.png",
+          "score": 0.7929
+        },
+        {
+          "filename": "DM_20261012132237_001.png",
+          "score": 0.7211
+        },
+        {
+          "filename": "DM_20261012132233_001.png",
+          "score": 0.7178
+        },
+        {
+          "filename": "DM_20261012132235_001.png",
+          "score": 0.7107
+        },
+        {
+          "filename": "DM_20261012132236_001.png",
+          "score": 0.601
+        }
+      ],
+      "relevance": {
+        "mode": "broad",
+        "strategy": "broad",
+        "min_score": 0.55,
+        "candidate_count": 6,
+        "matched_count": 6,
+        "filtered_count": 0
+      }
+    },
+    "auto": {
+      "hits": [
+        {
+          "filename": "DM_20261012132238_001.png",
+          "score": 0.8264
+        }
+      ],
+      "relevance": {
+        "mode": "auto",
+        "strategy": "image_text",
+        "min_score": 0.55,
+        "candidate_count": 6,
+        "matched_count": 1,
+        "filtered_count": 5
+      }
+    },
+    "image_text": {
+      "hits": [
+        {
+          "filename": "DM_20261012132238_001.png",
+          "score": 0.8264
+        }
+      ],
+      "relevance": {
+        "mode": "image_text",
+        "strategy": "image_text",
+        "min_score": 0.55,
+        "candidate_count": 6,
+        "matched_count": 1,
+        "filtered_count": 5
+      }
+    }
+  },
+  "missing_title_returns_empty": true,
+  "image_reference_retrieval_passed": true
+}

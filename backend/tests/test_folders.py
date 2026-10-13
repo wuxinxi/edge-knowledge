@@ -1,5 +1,6 @@
 import io
 import wave
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -9,6 +10,7 @@ from test_multimodal import SemanticDouble
 
 from edge_knowledge.api.app import create_app
 from edge_knowledge.application.backup import BackupService
+from edge_knowledge.application.catalog import CatalogMirror
 from edge_knowledge.application.chat import ChatService
 from edge_knowledge.application.folders import FolderService
 from edge_knowledge.application.images import ImageService
@@ -17,9 +19,11 @@ from edge_knowledge.application.semantic import SemanticService
 from edge_knowledge.infrastructure.archive import FileArchiveStore
 from edge_knowledge.infrastructure.assets import FileAssetStore
 from edge_knowledge.infrastructure.backup import ZipBackupCodec
+from edge_knowledge.infrastructure.catalog import SQLiteDocumentCatalog
 from edge_knowledge.infrastructure.chroma import ChromaKnowledgeRepository
 from edge_knowledge.infrastructure.images import PillowImageProcessor
 from edge_knowledge.infrastructure.media import AVMediaDecoder
+from edge_knowledge.infrastructure.metadata import YAMLMetadataReader
 from edge_knowledge.infrastructure.parsers import FileDocumentParser
 from edge_knowledge.infrastructure.payloads import FilePayloadStore
 from edge_knowledge.infrastructure.settings import JsonSettingsStore
@@ -57,6 +61,7 @@ def test_incremental_replacement_and_source_library_isolation(folders, tmp_path)
     library = folders.knowledge.repository.create_library("Another").id
     d = folders.upsert(library, source, "work/notes.md", content)["document_id"]
     assert len({manual, a, b, c, d}) == 5
+    assert folders.knowledge.repository.record("default", a).document.source_path == "work/notes.md"
     assert folders.upsert("default", source, "work/notes.md", content)["changed"] is False
     changed = folders.upsert("default", source, "work/notes.md", b"# New notes\nChanged")
     active = {doc.id for doc in folders.knowledge.repository.documents("default")}
@@ -119,6 +124,9 @@ def test_returning_to_old_content_or_reappearing_creates_a_distinct_recoverable_
     )
     decoded = ZipBackupCodec().decode(backup.export({}))
     assert len(decoded.libraries[0].items) == 4
+    assert all(
+        item.record.document.source_path == "notes.md" for item in decoded.libraries[0].items
+    )
 
 
 def test_folder_api_auth_complete_inventory_validation_and_relative_paths(folders):
@@ -177,3 +185,33 @@ def test_native_media_folder_replacement_uses_the_multimodal_pipeline(folders):
     document = folders.knowledge.repository.documents("default")[0]
     assert document.kind == "audio" and document.id == result["document_id"]
     assert folders.semantic.manifest("default", document.id)[0]["kind"] == "audio"
+
+
+def test_old_folder_imports_use_the_existing_relative_path_ledger_for_month_counts(folders):
+    source = str(uuid4())
+    result = folders.upsert(
+        "default", source, "2026-09/topic/index.md", b"---\nupdatedAt: 2026-10-07\n---\nNote"
+    )
+    repository = folders.knowledge.repository
+    record = repository.record("default", result["document_id"])
+    repository.delete("default", record.document.id)
+    repository.add(
+        "default", replace(record.document, source_path=""), record.chunks, record.vectors
+    )
+    chat = ChatService(
+        folders.knowledge,
+        folders.knowledge.settings,
+        TestGenerator(),
+        sources=folders.store,
+        catalog=CatalogMirror(
+            repository,
+            SQLiteDocumentCatalog(folders.store.path.parent / "catalog.sqlite3"),
+            YAMLMetadataReader(),
+            folders.knowledge.payloads,
+            folders.store,
+        ),
+    )
+    answer = chat.local_query("default", "2026 年 9 月写了多少篇笔记")
+    assert "归档" in answer["content"] and "1 篇" in answer["content"]
+    assert "无法确认" in answer["content"]
+    assert answer["sources"][0].document_id == record.document.id
