@@ -82,6 +82,7 @@ async function load() {
   error.value = ''
   try {
     settings.value = await api.settings()
+    capabilities.value = await api.capabilities()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('无法读取设置。')
   }
@@ -96,7 +97,11 @@ async function save(clearKey = false) {
     const current = settings.value
     const values: SettingsPatch =
       section === 'models'
-        ? { base_url: current.base_url, model: current.model.trim(), stream: current.stream }
+        ? {
+            base_url: current.base_url,
+            model: current.model.trim(),
+            stream: current.stream,
+          }
         : section === 'images'
           ? { image_qa_mode: current.image_qa_mode }
           : {
@@ -210,75 +215,78 @@ onMounted(() => {
               >
             </div>
             <div class="settings-fields">
-              <p v-if="settings.credential_message" class="inline-error" role="alert">
-                {{ settings.credential_message
-                }}<span v-if="settings.credential_migration_pending">
-                  {{ t('旧配置仍保留，请解锁系统凭据库后重新保存密钥。') }}</span
-                >
-              </p>
-              <div class="field">
-                <label for="api-key">DeepSeek API Key</label>
-                <div class="key-input">
-                  <KeyRound :size="17" /><input
-                    id="api-key"
-                    v-model="key"
-                    :type="revealKey ? 'text' : 'password'"
-                    autocomplete="off"
-                    :placeholder="
-                      settings.api_key_configured
-                        ? t('已保存密钥；留空则保留')
-                        : t('输入你的 API Key')
-                    "
-                    maxlength="500"
-                  /><button
-                    type="button"
-                    class="icon-button"
-                    :aria-label="revealKey ? t('隐藏密钥') : t('显示密钥')"
-                    @click="revealKey = !revealKey"
+
+                <p v-if="settings.credential_message" class="inline-error" role="alert">
+                  {{ settings.credential_message
+                  }}<span v-if="settings.credential_migration_pending">
+                    {{ t('旧配置仍保留，请解锁系统凭据库后重新保存密钥。') }}</span
                   >
-                    <EyeOff v-if="revealKey" :size="17" /><Eye v-else :size="17" />
-                  </button>
-                </div>
-                <p>
-                  {{ t('密钥保存在系统凭据库，保存后不会从服务端返回。')
-                  }}<button
-                    v-if="settings.api_key_configured"
-                    type="button"
-                    class="text-button danger"
-                    :disabled="saving"
-                    @click="save(true)"
-                  >
-                    {{ t('移除密钥') }}
-                  </button>
                 </p>
-              </div>
-              <div class="field-row">
                 <div class="field">
-                  <label for="base-url">{{ t('服务地址') }}</label
-                  ><select id="base-url" v-model="settings.base_url">
-                    <option value="https://api.deepseek.com">https://api.deepseek.com</option>
-                    <option value="https://api.deepseek.com/v1">https://api.deepseek.com/v1</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="model">{{ t('模型名称') }}</label
-                  ><input
-                    id="model"
-                    v-model="settings.model"
-                    maxlength="100"
-                    required
-                    placeholder="deepseek-flash"
-                  />
+                  <label for="api-key">DeepSeek API Key</label>
+                  <div class="key-input">
+                    <KeyRound :size="17" /><input
+                      id="api-key"
+                      v-model="key"
+                      :type="revealKey ? 'text' : 'password'"
+                      autocomplete="off"
+                      :placeholder="
+                        settings.api_key_configured
+                          ? t('已保存密钥；留空则保留')
+                          : t('输入你的 API Key')
+                      "
+                      maxlength="500"
+                    /><button
+                      type="button"
+                      class="icon-button"
+                      :aria-label="revealKey ? t('隐藏密钥') : t('显示密钥')"
+                      @click="revealKey = !revealKey"
+                    >
+                      <EyeOff v-if="revealKey" :size="17" /><Eye v-else :size="17" />
+                    </button>
+                  </div>
                   <p>
-                    {{ t('填写账户可用的 DeepSeek 模型名称。')
-                    }}{{
-                      capabilities?.generator.images
-                        ? t('当前模型支持图片输入。')
-                        : t('当前模型未声明图片输入能力。')
-                    }}
+                    {{ t('密钥保存在系统凭据库，保存后不会从服务端返回。')
+                    }}<button
+                      v-if="settings.api_key_configured"
+                      type="button"
+                      class="text-button danger"
+                      :disabled="saving"
+                      @click="save(true)"
+                    >
+                      {{ t('移除密钥') }}
+                    </button>
                   </p>
                 </div>
-              </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="base-url">{{ t('服务地址') }}</label
+                    ><select id="base-url" v-model="settings.base_url">
+                      <option value="https://api.deepseek.com">https://api.deepseek.com</option>
+                      <option value="https://api.deepseek.com/v1">
+                        https://api.deepseek.com/v1
+                      </option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="model">{{ t('模型名称') }}</label
+                    ><input
+                      id="model"
+                      v-model="settings.model"
+                      maxlength="100"
+                      required
+                      placeholder="deepseek-flash"
+                    />
+                    <p>
+                      {{ t('填写账户可用的 DeepSeek 模型名称。')
+                      }}{{
+                        capabilities?.generator.images
+                          ? t('当前模型支持图片输入。')
+                          : t('当前模型未声明图片输入能力。')
+                      }}
+                    </p>
+                  </div>
+                </div>
               <label class="toggle-row"
                 ><span
                   ><strong>{{ t('流式显示回答') }}</strong
@@ -307,6 +315,9 @@ onMounted(() => {
                 </select>
               </div>
               <p v-if="settings.image_qa_mode === 'local_ocr'" class="settings-note">
+                <span v-if="capabilities?.ocr.engine"
+                  >{{ t('识别引擎') }}：{{ capabilities.ocr.engine }}。
+                </span>
                 {{ t('默认只发送本地提取的相关文字，不发送图片。')
                 }}{{
                   capabilities?.ocr.available

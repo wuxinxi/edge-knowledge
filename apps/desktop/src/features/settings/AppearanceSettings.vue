@@ -215,6 +215,9 @@ const app = useAppStore()
         <dd>
           <span class="runtime-status" :class="{ ready: app.capabilities?.ocr.available }"></span
           >{{ t(app.capabilities?.ocr.available ? '本地 OCR 可用' : '本地 OCR 不可用') }}
+          <span v-if="app.capabilities?.ocr.engine" class="version-label">{{
+            app.capabilities.ocr.engine
+          }}</span>
         </dd>
       </div>
     </dl>

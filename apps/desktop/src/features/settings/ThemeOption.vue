@@ -16,6 +16,7 @@ const { t } = useI18n()
     <span class="theme-preview" :class="option" aria-hidden="true">
       <span class="mini-titlebar"><i></i><i></i><i></i></span>
       <span class="mini-workspace"
+        ><span class="mini-rail"><i></i><i></i><i></i><i></i></span
         ><span class="mini-sidebar"><i class="mini-logo"></i><i></i><i></i><i></i></span
         ><span class="mini-content"
           ><i class="mini-heading"></i><i class="mini-line long"></i><i class="mini-line"></i
