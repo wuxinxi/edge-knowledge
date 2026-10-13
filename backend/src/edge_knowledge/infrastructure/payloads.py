@@ -12,6 +12,12 @@ from .assets import FileAssetStore
 
 
 class FilePayloadStore(FileAssetStore):
+    def text(self, library: str, document: str) -> str:
+        try:
+            return json.loads((self._path(library, document) / "manifest.json").read_text())["text"]
+        except (FileNotFoundError, ValueError, KeyError) as exc:
+            raise AppError("原始素材不存在。", 404, "payload_not_found") from exc
+
     def put(self, library: str, document: str, text: str, assets: list[InputAsset]) -> None:
         target = self._path(library, document)
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

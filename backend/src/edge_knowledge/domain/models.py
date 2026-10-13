@@ -25,6 +25,7 @@ class Document:
     ocr_message: str = ""
     duration: float = 0
     assets: int = 0
+    source_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class OCRResult:
     text: str = ""
     regions: list[TextRegion] = field(default_factory=list)
     message: str = ""
+    engine: str = ""
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,8 @@ class QueryPlan:
     images: list[ImageAttachment] = field(default_factory=list, repr=False)
     notice: str = ""
     history: list[HistoryMessage] = field(default_factory=list, repr=False)
+    planner: str = "local"
+    provider: str = "deepseek"
 
 
 class AppError(Exception):

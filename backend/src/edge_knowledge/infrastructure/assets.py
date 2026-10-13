@@ -59,6 +59,18 @@ class FileAssetStore:
         if path.exists():
             shutil.rmtree(path)
 
+    def recognition(self, library_id: str, document_id: str) -> OCRResult:
+        try:
+            values = json.loads((self._path(library_id, document_id) / "ocr.json").read_text())
+            return OCRResult(
+                values["status"],
+                values.get("text", ""),
+                message=values.get("message", ""),
+                engine=values.get("engine", ""),
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            raise AppError("本地识字结果不存在。", 404, "asset_not_found") from exc
+
     def snapshot(self, library_id: str, document_id: str) -> tuple[PreparedImage, OCRResult]:
         target = self._path(library_id, document_id)
         try:
@@ -78,6 +90,7 @@ class FileAssetStore:
                     for item in values.get("regions", [])
                 ],
                 values.get("message", ""),
+                values.get("engine", ""),
             )
             return PreparedImage(data, (target / "thumbnail.png").read_bytes(), width, height), ocr
         except (OSError, ValueError, KeyError) as exc:

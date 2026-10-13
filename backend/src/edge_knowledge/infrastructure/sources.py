@@ -72,6 +72,15 @@ class SQLiteSourceStore:
                 )
             ]
 
+    def paths(self, library: str) -> dict[str, str]:
+        with self._connect() as connection:
+            return dict(
+                connection.execute(
+                    "SELECT document_id, path FROM source_files WHERE library=? ORDER BY path",
+                    (library,),
+                )
+            )
+
     def get(self, library: str, source: str, path: str) -> SourceFile | None:
         with self._connect() as connection:
             row = connection.execute(
