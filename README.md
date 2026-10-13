@@ -58,7 +58,7 @@ npm run check
 npm run build
 ```
 
-后端测试使用实际 Chroma、Pillow 和可用时的 macOS Vision OCR；嵌入与生成使用受控适配器，不下载模型、不使用真实密钥、不产生 DeepSeek 费用。桌面进程测试实际启动并终止 Python 服务。构建产物位于 `out/`。
+后端测试使用实际 Chroma、Pillow 和可用时的 macOS Vision / RapidOCR 本地模型；跨平台 OCR 测试阻止网络连接后执行识别。嵌入与生成使用受控适配器，不下载模型、不使用真实密钥、不产生 DeepSeek 费用。桌面进程测试实际启动并终止 Python 服务。构建产物位于 `out/`。
 
 需要验证实际模型时，安装嵌入依赖后运行 `uv run --project backend --no-sync python scripts/check_model.py`。此检查需要先准备模型权重，不调用 DeepSeek。
 
@@ -90,3 +90,11 @@ npm run package:mac
 知识库页面可直接添加文件夹来源，支持子目录和每分钟增量同步、暂停/恢复、移除来源，以及相对路径清单搜索与分页。文件/目录只读授权与撤销仍在侧栏「本地权限」管理，见 [文件夹知识库](docs/folder-sources.md)。当前完成范围与未完成项见 [待办清单](docs/completion-gaps.md)。
 
 设置 → 数据与关于可创建本机 `.edgebackup`，校验后恢复为新知识库；目录授权与 API Key 不进入备份。普通资料移除可在“回收站与暂存”恢复。系统密钥存储及旧配置迁移说明见数据维护文档。
+
+## 跨平台图片文字识别
+
+安装 `ocr` 依赖后，macOS 优先系统 Vision，Windows/Linux 使用本机 RapidOCR/ONNX Runtime。模型随依赖安装，识别时不下载、不上传；设置显示引擎与可用状态。Windows Python 子进程路径已适配，但 Windows/Linux 完整安装包及其他系统集成仍需实机验收。详见 [本地 OCR](docs/local-ocr.md)。
+
+## 筛选、统计与 AI 规划
+
+聊天中的“筛选与统计”支持组合日期、标签、类型、文字和自定义字段，并执行计数、数值聚合、分组与排序，不需要 API Key。复杂自然语言只有明确开启 AI 模式才允许 DeepSeek 规划；结果仍由本机执行。旧资料自动补建元数据索引，不重新生成向量。详见 [通用查询执行](docs/query-engine.md)。

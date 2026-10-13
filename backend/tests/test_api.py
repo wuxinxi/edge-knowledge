@@ -85,7 +85,7 @@ def test_empty_library_avoids_model_and_cloud(system):
     client, knowledge, _, generator = system
     response = client.post("/api/query", json={"question": "内容是什么？"})
     payloads = events(response)
-    assert [event["type"] for event in payloads] == ["sources", "delta", "done"]
+    assert [event["type"] for event in payloads] == ["sources", "execution", "delta", "done"]
     assert knowledge.embedder.loaded is False and generator.calls == 0
 
 

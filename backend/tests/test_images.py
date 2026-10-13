@@ -82,12 +82,12 @@ def test_ocr_text_mode_never_attaches_images(system):
     client, _, chat, _ = system
     upload(client)
     client.patch("/api/settings", json={"api_key": "test-key", "model": "deepseek-chat"})
-    plan = chat.prepare("default", "取件码是多少？")
+    plan = chat.prepare("default", "请解释取件码的用途")
     assert plan.images == []
     assert "本地 OCR 提取文字" in plan.prompt and "6583" in plan.prompt
-    payloads = events(client.post("/api/query", json={"question": "取件码是多少？"}))
+    payloads = events(client.post("/api/query", json={"question": "请解释取件码的用途"}))
     assert any(
-        event["type"] == "notice" and "未向 DeepSeek 发送图片" in event["message"]
+        event["type"] == "notice" and "发送至 DeepSeek，不发送原图" in event["message"]
         for event in payloads
     )
     assert payloads[-1] == {"type": "done"}

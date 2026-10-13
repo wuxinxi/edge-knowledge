@@ -19,7 +19,7 @@
 | POST `/search`                                          | `{question, library_id?, top_k?, document_ids?}`                                         | `SearchHit[]`，不调用 DeepSeek                                                         |
 | POST `/query`                                           | `{question, library_id?, top_k?, stream?, allow_image_upload?, document_ids?, history?}` | SSE，传输格式始终为 SSE                                                                |
 
-`library_id` 默认 `default`；问题长度 1–4000 字符；`top_k` 1–20。`stream` 控制 DeepSeek 是否流式生成，非流式生成仍在 SSE 中发出一个完整的 delta。
+`library_id` 默认 `default`；问题长度 1–4000 字符；`top_k` 1–20。`stream` 控制所选本地/云端模型是否流式生成，非流式生成仍在 SSE 中发出一个完整的 delta。
 
 `Document` 包括 `id, filename, chunks, size, created_at, kind, media_type, width, height, ocr_status, ocr_message, duration, assets`。`kind` 为 `document`、`image`、`audio`、`video` 或 `bundle`；文本宽高为 0。`SearchHit` 包括 `document_id, filename, text, section, index, score, kind, ocr_status, start, end`。图片命中按文档去重。
 
@@ -50,7 +50,9 @@
 ```text
 data: {"type":"sources","sources":[{"document_id":"…","filename":"ticket.png","text":"取件码 6583","section":"图片文字","index":1,"score":0.85,"kind":"image","ocr_status":"ready"}]}
 
-data: {"type":"notice","message":"图片依据来自本地 OCR 文字，未向 DeepSeek 发送图片。"}
+data: {"type":"execution","location":"local"}
+
+data: {"type":"notice","message":"本次仅在本机检索并展示原文，不调用 DeepSeek，也不发送图片或文字。"}
 
 data: {"type":"delta","delta":"回答片段"}
 
@@ -90,7 +92,7 @@ data: {"type":"done"}
 | 方法与路径                                                  | 请求                                                                            | 响应                                                                  |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | POST `/multimodal/budget`                                   | multipart `options` JSON 字符串与可选多个 `files`                               | `{limit,max_tokens,segments,fits,details}`；只解码/计数，不推理或入库 |
-| POST `/multimodal/search`                                   | 同上                                                                            | `{sources,budget,dimension,aggregation}`                              |
+| POST `/multimodal/search`                                   | 同上                                                                            | `{sources,budget,dimension,aggregation,relevance}`                    |
 | POST `/multimodal/ingest`                                   | 同上                                                                            | `{document,duplicate,budget?}`，201                                   |
 | POST `/organize`                                            | JSON `{library_id?,task,document_ids?,dimension?,labels?,clusters?,threshold?}` | 分类 assignments、聚类 groups 或查重 pairs，以及参与 documents        |
 | GET `/libraries/{id}/documents/{document_id}/media`         | 无                                                                              | 素材元数据列表，包含 index/filename/kind/media_type                   |
@@ -111,7 +113,7 @@ data: {"type":"done"}
 
 所有接口仍需本地会话认证。
 
-- `POST /api/backup/export`：JSON `{chats?, preferences?}`，前端数据最多 3 MB。返回未加密 ZIP，`Cache-Control: no-store`，不包含凭据、服务配置、目录授权和模型权重。
+- `POST /api/backup/export`：JSON `{chats?, preferences?}`，前端数据最多 64 MB。返回未加密 ZIP，`Cache-Control: no-store`，不包含凭据、服务配置、目录授权和模型权重。
 - `POST /api/backup/inspect`：multipart `file`，最多 512 MB。返回 `model`、`compatible`、`libraries`、`documents`、`archived`、`missing_originals` 与校验后的 `frontend`；不会写入知识库。
 - `POST /api/backup/restore`：multipart `file`。完整校验后恢复为新知识库，返回新 `libraries`、旧到新库 ID 的 `mapping` 与 `frontend`。不替换现有库。格式错误 `422 invalid_backup`，模型不一致 `409 backup_model_mismatch`，体积超限 `413`。
 
@@ -140,3 +142,46 @@ data: {"type":"done"}
 ## 聊天文本检索结果
 
 `/search` 与 `/query` 的文本检索统一应用 `min_score`，top-k 为最多返回条数；不足时不补低质量片段。具体实体/编号与词项参与候选排序，输出 `score` 仍为余弦相似度，排序可能不按该单项分数递减。独立的新问题不拼接旧主题，明确短追问保留历史检索上下文。联合媒体 `/multimodal/search` 仍采用多模态策略。
+
+## 本地查找与 AI 解读
+
+`/api/search` 始终只执行本地检索，不调用 DeepSeek。其处理入口与 `/api/query` 共用 ChatService 的读取路由：明确的找图/音视频请求使用既有 SemanticService 的筛选，其他文字查找仍使用 KnowledgeService；范围/跨库引用校验不变，空的媒体候选库直接返回空结果，不加载模型。
+
+`/api/query` 的明确查找指令（例如“帮我检索…图片”）和直接原文字段查询（例如“取件码是多少”）优先返回本地结果，即使已配置密钥或云端看图；不检查云端图片发送许可、不创建附图、不调用生成器，查不到不回退云端。明确总结/分析/解释仍执行原生成路径，需要密钥，发送图片继续受逐次授权与模型能力约束。这是保守的本地规则路由，不是另一个云端意图分类服务；不宣称所有自然语言问题都能离线回答。
+
+SSE 在 sources 后增加 `execution:{location:"local"|"cloud"}`，描述后续执行路径。本地分支保留完整来源片段并给出简短结果提示；客户端把本地执行显示为“本地检索”，直接显示图片/播放器/文档片段，OCR 原文默认收起。图片文字用于 AI 解读时，notice 明确说明会发送 OCR 文字、不发送原图。旧服务需重启加载路由与事件，旧会话数据无需迁移或重建。
+
+## 多模态相关性参数
+
+`/api/multimodal/search` 的 multipart `options` 新增：
+
+- `match_mode`：`auto`（默认）、`image_text`、`broad`。自动模式的纯文字搜图优先匹配真实 OCR 的完整短语或充分词项；没有充分文字匹配时使用语义筛选。含图片/音视频的查询使用联合向量，不用文字匹配替代媒体。
+- `image_text` 只允许无媒体的文字查询与 `kinds:["image"]`；匹配不到返回空列表，不回退视觉分数或文件名。无 OCR 的图片无法按图片文字匹配。
+- `min_score`：视觉/语义匹配门槛，默认 `0.55`，范围 `[-1,1]`。自动语义筛选还保留与首条分数差不超过 `0.08` 的候选；`broad` 取消文字优先与相对差距筛选，但仍应用请求门槛。OCR 短语命中不受向量分数门槛限制。
+
+返回增加 `relevance:{mode,strategy,min_score,candidate_count,matched_count,filtered_count}`；`strategy` 为 `image_text`、`semantic` 或 `broad`。图片候选按资料 ID 计数（OCR/视觉切片合并），音视频按时间片段计数。`matched_count` 为截断 top-k 前的命中数，`filtered_count` 不包含仅因 top-k 上限未展示的候选。`score` 为选中片段的实际余弦分数，不伪造 OCR 置信度。
+
+这些阈值是可调整的筛选启发式，不是模型校准后的正确率。无需重建索引；已运行的本地服务需要重启加载规则。
+
+## 会话存储接口
+
+- GET `/api/chat-state`：`{version:1,initialized,revision,sessions,active,lastLibrary?}`，返回完整会话快照。首次初始化 `initialized:false`，即使删除全部记录，初始化标记依然保留，不重新导入旧缓存。
+- POST `/api/chat-state`：`{version:1,revision,sessions,active,lastLibrary?}`。提交原始文本、来源、消息状态、历史回答与自动/手动标题标记；没有模型上下文长度裁剪。成功返回新 revision，SQLite 事务完成后响应。过期 revision 返回 409 `chat_conflict`；字段、身份和活跃会话引用无效返回 422，不回显正文或密钥。
+
+会话快照与向量库独立，跨知识库保存归属；本机用户数据不发送云端。暂存/回收、备份和界面缓存有各自用途，不能把界面缓存写入成功当作数据库提交成功。
+
+## OCR 引擎信息
+
+`/api/capabilities` 的 `ocr` 增加 `engine`（当前优先可用引擎名；不可用为空）；`/api/ocr` 返回 `engine`（本次实际使用的引擎），以及原有 status/text/regions/message/width/height。macOS 默认 `macOS Vision`；Windows/Linux 与 macOS 本地替代实现为 `RapidOCR · ONNX Runtime`。识别不调用云端，不在请求中下载模型；依赖缺失明确 unavailable，仍可图片向量检索。OCRResult 持久化增加兼容旧记录的 engine 字段，未更改历史文字。
+
+## 通用查询接口
+
+- `GET /api/catalog/contract`：返回 QuerySpec v1 允许字段、操作与计划示例，需要既有认证。
+- `GET /api/catalog/schema?library_id=...`：返回当前库中自定义字段名称、类型和本地覆盖数量，不返回原文或字段值。
+- `POST /api/catalog/query`：使用 QueryRequest 的 `query_plan` 执行本地结构化查询，必填计划；不调用规划器。
+- `POST /api/local-query`：本地检索、快速编译明确问题或执行显式 `query_plan`，返回 `{kind, content, sources, notice, query?}`。query 包含通过校验的计划、条件摘要、计算结果和规划来源。来源不是总计数，每页最多 50 项；元数据依据使用 `score: 0`，不代表向量相似度。
+- `POST /api/query`：保留 SSE。QueryRequest 增加可选 `query_plan`、`allow_planning`（默认 false）、`timezone`（默认 Asia/Shanghai）。只有明确选择 DeepSeek 且 AI 客户端显式设置 allow_planning 才允许云端规划，本地生成提供方使用本地规划器。execution 可增加 `planner: deepseek`，说明本次使用过云端规划，即使结果由本机计算。
+
+`/api/search` 的原数组响应保留兼容，仍是片段检索接口。新查询端点继续执行认证、库隔离、引用范围校验、图片授权和密钥保护。计划中不能指定其他库或引用集合，不能提供 SQL、执行文件操作或自行返回数量。元数据 count 覆盖全部活动文档，检索 top-k 和结果分页不限制计算总数。
+
+来源与原始会话数据保持完整；会话消息增加可选 queryPlan 和 planner，历史回答保留 planner，旧快照可继续读取。详细字段、日期口径、数据质量和 JSON 示例见 [通用查询执行](query-engine.md)。

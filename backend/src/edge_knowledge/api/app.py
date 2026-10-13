@@ -13,12 +13,14 @@ from starlette.concurrency import run_in_threadpool
 
 from edge_knowledge.application.backup import BackupService
 from edge_knowledge.application.chat import ChatService
+from edge_knowledge.application.conversations import ConversationService
 from edge_knowledge.application.folders import FolderService
 from edge_knowledge.application.knowledge import KnowledgeService
 from edge_knowledge.application.maintenance import LibraryMaintenance
 from edge_knowledge.application.semantic import SemanticService
 from edge_knowledge.domain.models import AppError, HistoryMessage
 
+from .conversations import ConversationSnapshot
 from .schemas import (
     DocumentBatch,
     LibraryCreate,
@@ -40,11 +42,17 @@ def create_app(
     backup: BackupService | None = None,
     folders: FolderService | None = None,
     maintenance: LibraryMaintenance | None = None,
+    conversations: ConversationService | None = None,
 ) -> FastAPI:
     if not token:
         raise RuntimeError("EDGE_BACKEND_TOKEN is required for a standalone backend.")
+
     app = FastAPI(
-        title="Edge Knowledge", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None
+        title="Edge Knowledge",
+        version="0.1.0",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     @app.middleware("http")
@@ -100,6 +108,18 @@ def create_app(
     def create_library(body: LibraryCreate):
         with knowledge.transaction():
             return asdict(knowledge.repository.create_library(body.name))
+
+    if conversations:
+
+        @app.get("/api/chat-state")
+        def read_chats():
+            return conversations.read()
+
+        @app.post("/api/chat-state")
+        def save_chats(body: ConversationSnapshot):
+            value = body.model_dump(exclude_unset=True)
+            revision = value.pop("revision")
+            return conversations.save(value, revision)
 
     @app.get("/api/libraries/{library_id}/documents")
     def documents(library_id: str):
@@ -246,7 +266,7 @@ def create_app(
         config = knowledge.settings.read()
         return [
             asdict(hit)
-            for hit in knowledge.search(
+            for hit in chat.search(
                 body.library_id, body.question, body.top_k or config["top_k"], body.document_ids
             )
         ]
@@ -262,6 +282,9 @@ def create_app(
             body.allow_image_upload,
             body.document_ids,
             [HistoryMessage(item.role, item.content) for item in body.history],
+            body.query_plan,
+            body.allow_planning,
+            body.timezone,
         )
 
         async def events():
@@ -289,6 +312,44 @@ def create_app(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.post("/api/local-query")
+    def local_query(body: QueryRequest):
+        result = chat.local_query(
+            body.library_id,
+            body.question,
+            body.top_k,
+            body.document_ids,
+            body.query_plan,
+            body.timezone,
+        )
+        return {**result, "sources": [asdict(hit) for hit in result["sources"]]}
+
+    @app.get("/api/catalog/contract")
+    def catalog_contract():
+        from edge_knowledge.domain.query import query_contract
+
+        return query_contract()
+
+    @app.get("/api/catalog/schema")
+    def catalog_schema(library_id: str = "default"):
+        if not chat.queries:
+            raise AppError("本地查询执行器尚未配置。", 503)
+        return chat.queries.schema(library_id, [])
+
+    @app.post("/api/catalog/query")
+    def catalog_query(body: QueryRequest):
+        if body.query_plan is None:
+            raise AppError("请提供结构化查询条件。", 422)
+        result = chat.local_query(
+            body.library_id,
+            body.question,
+            body.top_k,
+            body.document_ids,
+            body.query_plan,
+            body.timezone,
+        )
+        return {**result, "sources": [asdict(hit) for hit in result["sources"]]}
 
     if semantic:
 
@@ -340,6 +401,8 @@ def create_app(
                 body.kinds,
                 body.task,
                 body.dimension,
+                body.match_mode,
+                body.min_score,
             )
 
         @app.post("/api/multimodal/ingest", status_code=201)

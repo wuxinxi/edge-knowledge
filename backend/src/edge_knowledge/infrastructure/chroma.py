@@ -78,6 +78,7 @@ class ChromaKnowledgeRepository:
                     meta.get("ocr_message", ""),
                     meta.get("duration", 0),
                     meta.get("assets", 0),
+                    meta.get("source_path", ""),
                 )
         return sorted(docs.values(), key=lambda item: item.created_at, reverse=True)
 
@@ -102,6 +103,7 @@ class ChromaKnowledgeRepository:
             meta.get("ocr_message", ""),
             meta.get("duration", 0),
             meta.get("assets", 0),
+            meta.get("source_path", ""),
         )
         rows = sorted(
             [
@@ -161,6 +163,7 @@ class ChromaKnowledgeRepository:
                             "ocr_message": document.ocr_message,
                             "duration": document.duration,
                             "assets": document.assets,
+                            "source_path": document.source_path,
                             "start": chunk.start,
                             "end": chunk.end,
                         }

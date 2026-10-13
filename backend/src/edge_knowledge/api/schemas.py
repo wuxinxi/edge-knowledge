@@ -1,6 +1,9 @@
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from edge_knowledge.domain.query import QuerySpec
 
 
 class StrictBody(BaseModel):
@@ -45,6 +48,23 @@ class QueryRequest(StrictBody):
     allow_image_upload: bool = False
     document_ids: list[str] = Field(default_factory=list, max_length=10)
     history: list[HistoryEntry] = Field(default_factory=list, max_length=10)
+    query_plan: dict | None = None
+    allow_planning: bool = False
+    timezone: str = Field(default="Asia/Shanghai", max_length=100)
+
+    @field_validator("query_plan")
+    @classmethod
+    def valid_plan(cls, value):
+        return QuerySpec.parse(value).mapping() if value is not None else None
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("Invalid timezone") from exc
+        return value
 
     @field_validator("document_ids")
     @classmethod
@@ -89,6 +109,8 @@ class SemanticRequest(StrictBody):
     task: Literal["search", "document", "code", "qa", "fact"] = "search"
     dimension: Literal[128, 256, 512, 768] = 768
     top_k: int = Field(default=10, ge=1, le=50)
+    match_mode: Literal["auto", "image_text", "broad"] = "auto"
+    min_score: float = Field(default=0.55, ge=-1, le=1)
     document_ids: list[str] = Field(default_factory=list, max_length=200)
     kinds: list[Literal["document", "image", "audio", "video", "bundle"]] = Field(
         default_factory=list, max_length=5

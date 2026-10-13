@@ -2,14 +2,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from edge_knowledge.api.app import create_app
+from edge_knowledge.application.catalog import CatalogMirror, IndexedKnowledgeRepository
 from edge_knowledge.application.chat import ChatService
 from edge_knowledge.application.images import ImageService
 from edge_knowledge.application.knowledge import KnowledgeService
 from edge_knowledge.domain.models import ModelCapabilities, OCRResult, TextRegion
 from edge_knowledge.infrastructure.assets import FileAssetStore
+from edge_knowledge.infrastructure.catalog import SQLiteDocumentCatalog
 from edge_knowledge.infrastructure.chroma import ChromaKnowledgeRepository
 from edge_knowledge.infrastructure.images import PillowImageProcessor
+from edge_knowledge.infrastructure.metadata import YAMLMetadataReader
 from edge_knowledge.infrastructure.parsers import FileDocumentParser
+from edge_knowledge.infrastructure.payloads import FilePayloadStore
 from edge_knowledge.infrastructure.settings import JsonSettingsStore
 
 
@@ -74,11 +78,22 @@ class TestGenerator:
 def system(tmp_path):
     settings = JsonSettingsStore(tmp_path, credentials=MemoryCredentials())
     repository = ChromaKnowledgeRepository(tmp_path / "chroma", "test-model")
+    payloads = FilePayloadStore(tmp_path / "payloads")
+    catalog = CatalogMirror(
+        repository,
+        SQLiteDocumentCatalog(tmp_path / "catalog.sqlite3"),
+        YAMLMetadataReader(),
+        payloads,
+    )
+    repository = IndexedKnowledgeRepository(repository, catalog)
     embedder = TestEmbedder()
     images = ImageService(PillowImageProcessor(), TestOCR(), FileAssetStore(tmp_path / "assets"))
-    knowledge = KnowledgeService(FileDocumentParser(), embedder, repository, settings, images)
+    catalog.assets = images.assets
+    knowledge = KnowledgeService(
+        FileDocumentParser(), embedder, repository, settings, images, payloads
+    )
     generator = TestGenerator()
-    chat = ChatService(knowledge, settings, generator)
+    chat = ChatService(knowledge, settings, generator, catalog=catalog)
     app = create_app(knowledge, chat, "test-session-token", "http://localhost:5173")
     with TestClient(app, headers={"Authorization": "Bearer test-session-token"}) as client:
         yield client, knowledge, chat, generator
