@@ -186,6 +186,8 @@ SSE 在 sources 后增加 `execution:{location:"local"|"cloud"}`，描述后续�
 
 来源与原始会话数据保持完整；会话消息增加可选 queryPlan 和 planner，历史回答保留 planner，旧快照可继续读取。详细字段、日期口径、数据质量和 JSON 示例见 [通用查询执行](query-engine.md)。
 
+`duplicates` 返回 `kind: "comparison"` 与 `comparisons` 候选页，query.result 保存全量 `scanned`、`total`、`candidate_documents`。SSE 增加 `{type:"comparisons",comparisons:[...]}`，不调用回答生成器。每对包含 `left` / `right` 来源、`score`、`exact`，以及可选 `body_exact` 和 `content_similarity`。来源可增加相对 `path`；两侧 text 为最多 2400 字的展示片段。会话、回答版本和备份保存这些字段，最多每页 50 对。旧快照缺少字段仍兼容。工具只读取当前库中符合 where 的活动文档，语义 text_query 不允许作为全量比较范围；见 [聊天重复比较](chat-duplicates.md)。
+
 ## 本地生成模型
 
 Settings 新增 `generation_provider: local|deepseek`（默认 local）、`local_model_path`、`local_server_path` 和 `local_context_size`（2048–32768，默认8192）。文件路径为空或完整绝对路径；模型需 GGUF。路径不表示运行程序已安装或模型已就绪。

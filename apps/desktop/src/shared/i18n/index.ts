@@ -2,6 +2,19 @@ import { usePreferences } from '../preferences/store'
 
 // Product copy is translated here; source text and model answers retain their original language.
 const english: Record<string, string> = {
+  检查重复: 'Check duplicates',
+  对比重复笔记: 'Compare duplicate notes',
+  检查当前资料范围的重复笔记: 'Check duplicate notes in the current scope',
+  重复内容对比: 'Compare duplicate content',
+  候选: 'Candidate',
+  内容一致: 'Identical content',
+  正文一致: 'Identical body text',
+  相似内容: 'Similar content',
+  相似度: 'Similarity',
+  左侧笔记: 'Left note',
+  右侧笔记: 'Right note',
+  本地重复检查: 'Local duplicate check',
+  '重复检查 · AI 规划': 'Duplicate check · AI planning',
   识别引擎: 'Recognition engine',
   'AI 解读': 'AI interpretation',
   '通过 DeepSeek 总结与解释资料': 'Summarize and explain sources with DeepSeek',

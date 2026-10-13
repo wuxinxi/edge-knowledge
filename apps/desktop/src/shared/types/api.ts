@@ -27,7 +27,8 @@ export interface Document {
   assets?: number
 }
 export interface LocalQueryResult {
-  kind?: 'retrieval' | 'catalog' | 'clarification'
+  comparisons?: DuplicateComparison[]
+  kind?: 'retrieval' | 'catalog' | 'clarification' | 'comparison'
   query?: { plan?: import('./query').QuerySpec; planner?: 'local' | 'local_model' | 'deepseek' }
   sources: Source[]
   content: string
@@ -35,6 +36,7 @@ export interface LocalQueryResult {
 }
 
 export interface Source {
+  path?: string
   document_id: string
   filename: string
   text: string
@@ -45,6 +47,14 @@ export interface Source {
   ocr_status?: string
   start?: number
   end?: number
+}
+export interface DuplicateComparison {
+  left: Source
+  right: Source
+  score: number
+  exact: boolean
+  body_exact?: boolean
+  content_similarity?: number
 }
 export interface HistoryMessage {
   role: 'user' | 'assistant'
@@ -122,6 +132,7 @@ export type ChatEvent =
       generator?: 'local' | 'deepseek'
     }
   | { type: 'sources'; sources: Source[] }
+  | { type: 'comparisons'; comparisons: DuplicateComparison[] }
   | { type: 'delta'; delta: string }
   | { type: 'done' }
   | { type: 'notice'; message: string }

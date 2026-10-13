@@ -17,7 +17,7 @@ from edge_knowledge.domain.multimodal import (
 )
 
 from .knowledge import KnowledgeService
-from .ports import ArchiveStore, MediaDecoder, MultimodalEmbedder, PayloadStore
+from .ports import ArchiveStore, MediaDecoder, MultimodalEmbedder, PayloadStore, SimilarityMatcher
 
 AUDIO = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
 VIDEO = {".mp4", ".mov", ".mkv", ".webm"}
@@ -33,6 +33,7 @@ class SemanticService:
         decoder: MediaDecoder,
         payloads: PayloadStore,
         archive: ArchiveStore | None = None,
+        matcher: SimilarityMatcher | None = None,
     ):
         self.knowledge, self.embedder, self.decoder, self.payloads = (
             knowledge,
@@ -41,6 +42,7 @@ class SemanticService:
             payloads,
         )
         self.archive = archive
+        self.matcher = matcher
         self._lock = RLock()
         self._cache: OrderedDict = OrderedDict()
 
@@ -350,6 +352,81 @@ class SemanticService:
             self._cache.popitem(last=False)
         return vector
 
+    def duplicates(
+        self, library: str, ids: list[str], threshold: float, limit: int, offset: int
+    ) -> dict:
+        """Compare all scoped notes using their existing normalized document vectors."""
+        with self.knowledge.transaction(), self._lock:
+            selected = set(ids)
+            docs = sorted(
+                (doc for doc in self.knowledge.repository.documents(library) if doc.id in selected),
+                key=lambda doc: (doc.filename, doc.id),
+            )
+            if any(doc.kind != "document" for doc in docs):
+                raise AppError(
+                    "聊天查重目前只比较文档笔记；图片和媒体请使用工作台。",
+                    422,
+                    "duplicate_kind_unsupported",
+                )
+            if not docs:
+                return {"total": 0, "candidate_documents": 0, "scanned": 0, "pairs": []}
+            if not self.matcher:
+                raise AppError("查重执行器尚未配置。", 503, "duplicate_tool_unavailable")
+            vectors = {}
+            for hit, vector in self.knowledge.repository.iter_vectors(
+                library, [d.id for d in docs]
+            ):
+                if hit.document_id not in vectors:
+                    vectors[hit.document_id] = list(vector)
+                else:
+                    if len(vector) != len(vectors[hit.document_id]):
+                        raise AppError("资料向量维度不一致。", 409, "invalid_similarity_vectors")
+                    vectors[hit.document_id] = [
+                        a + b for a, b in zip(vectors[hit.document_id], vector, strict=True)
+                    ]
+            if set(vectors) != {d.id for d in docs}:
+                raise AppError(
+                    "部分资料缺少向量，未执行不完整的查重。", 409, "invalid_similarity_vectors"
+                )
+            texts, fingerprints = [], []
+            for doc in docs:
+                try:
+                    text, assets = self.payloads.get(library, doc.id)
+                except AppError as exc:
+                    if exc.code != "payload_not_found":
+                        raise
+                    text = "\n".join(
+                        c.text for c in self.knowledge.repository.chunks(library, doc.id)
+                    )
+                    assets = []
+                texts.append(text)
+                digest = hashlib.sha256(text.encode())
+                for asset in assets:
+                    digest.update(asset.kind.encode() + b"\0" + asset.content)
+                fingerprints.append(digest.hexdigest())
+            result = self.matcher.match(
+                [unit(vectors[d.id]) for d in docs], fingerprints, threshold, limit, offset, texts
+            )
+            snippets = {}
+            for pair in result["pairs"]:
+                for index in (pair["left"], pair["right"]):
+                    doc = docs[index]
+                    if index not in snippets:
+                        snippets[index] = {
+                            "document_id": doc.id,
+                            "filename": doc.filename,
+                            "path": doc.source_path or doc.filename,
+                            "text": texts[index][:2400],
+                            "section": "查重对比摘录",
+                            "index": 0,
+                            "kind": "document",
+                        }
+                pair["left"], pair["right"] = (
+                    {**snippets[pair["left"]], "score": pair["score"]},
+                    {**snippets[pair["right"]], "score": pair["score"]},
+                )
+            return {**result, "scanned": len(docs)}
+
     def organize(
         self,
         library: str,
@@ -404,6 +481,18 @@ class SemanticService:
             if task == "similarity":
                 pairs = []
                 fingerprints = [self._fingerprint(library, doc) for doc in docs]
+                if self.matcher:
+                    result = self.matcher.match(
+                        vectors, fingerprints, threshold, len(docs) * (len(docs) - 1) // 2, 0
+                    )
+                    return {
+                        **base,
+                        "pairs": [
+                            {**pair, "left": docs[pair["left"]].id, "right": docs[pair["right"]].id}
+                            for pair in result["pairs"]
+                        ],
+                        "threshold": threshold,
+                    }
                 for i, left in enumerate(vectors):
                     for j in range(i + 1, len(vectors)):
                         score = (

@@ -31,7 +31,9 @@
 
 ## QuerySpec v1
 
-支持 `list`、`aggregate`、`search`、`answer`、`clarify`。布尔树使用 `all` / `any`，叶节点使用 `field`、`op` 和 `value`。操作包括等于、不等于、包含、任一值、大小比较、已标注和未标注。
+支持 `list`、`aggregate`、`search`、`answer`、`clarify`、`duplicates`。布尔树使用 `all` / `any`，叶节点使用 `field`、`op` 和 `value`。操作包括等于、不等于、包含、任一值、大小比较、已标注和未标注。
+
+`duplicates` 对完整筛选范围内的活动文档比较，`text_query` 必须为空，不能用语义 top-k 冒充全库检查。`threshold` 为 0–1 的有限数，默认 0.9；正文核验与内容指纹共同过滤候选。返回全量数量及有限候选页，两侧片段在聊天直接展示。执行与资源边界见 [重复笔记比较](chat-duplicates.md)。
 
 字段覆盖标题、文件名、相对路径、类型、扩展名、标签、资料文字、大小、时长、片段数、标准日期，以及 `metadata.<字段名>` 的扁平自定义字段。自定义字段定义可从当前知识库的 schema 获取；不存在的字段会报错，不能产生假的零结果。
 

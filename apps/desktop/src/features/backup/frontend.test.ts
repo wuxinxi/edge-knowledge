@@ -85,3 +85,36 @@ it('exports full long messages and previous answer versions without truncation',
   expect(restored.messages[0]!.versions![0]!.notice).toBe('旧回答')
   expect(restored.titleSource).toBe('manual')
 })
+
+it('preserves both duplicate sides, original whitespace and historical comparisons', () => {
+  const source = {
+    ...conversation.messages[0]!.sources[0]!,
+    path: 'notes/项目/notes.md',
+    text: '  原文\n\n结尾  ',
+  }
+  const pair = {
+    left: source,
+    right: { ...source, document_id: 'copy', path: 'archive/项目/notes.md' },
+    score: 1,
+    exact: true,
+    body_exact: true,
+    content_similarity: 1,
+  }
+  const backup = validateChatBackup({
+    version: 1,
+    sessions: [
+      {
+        ...conversation,
+        messages: [
+          {
+            ...conversation.messages[0],
+            comparisons: [pair],
+            versions: [{ content: 'Old', sources: [], savedAt: '2026-10-13', comparisons: [pair] }],
+          },
+        ],
+      },
+    ],
+  })
+  expect(backup[0]!.messages[0]!.comparisons).toEqual([pair])
+  expect(backup[0]!.messages[0]!.versions![0]!.comparisons).toEqual([pair])
+})

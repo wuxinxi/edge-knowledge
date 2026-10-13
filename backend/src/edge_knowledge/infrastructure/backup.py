@@ -90,6 +90,7 @@ class ReferenceValue(StrictModel):
 
 
 class SourceValue(StrictModel):
+    path: str | None = Field(default=None, max_length=4096)
     document_id: str = Field(min_length=1, max_length=100)
     filename: str = Field(min_length=1, max_length=255)
     text: str
@@ -102,6 +103,15 @@ class SourceValue(StrictModel):
     end: float | None = Field(default=None, ge=0)
 
 
+class ComparisonValue(StrictModel):
+    left: SourceValue
+    right: SourceValue
+    score: float = Field(ge=-1, le=1)
+    exact: bool
+    body_exact: bool | None = None
+    content_similarity: float | None = Field(default=None, ge=0, le=1)
+
+
 class AnswerVersionValue(StrictModel):
     content: str
     sources: list[SourceValue]
@@ -110,6 +120,7 @@ class AnswerVersionValue(StrictModel):
     savedAt: str
     planner: Literal["local", "local_model", "deepseek"] | None = None
     generator: Literal["local", "deepseek"] | None = None
+    comparisons: list[ComparisonValue] | None = Field(default=None, max_length=50)
 
 
 class MessageValue(StrictModel):
@@ -127,6 +138,7 @@ class MessageValue(StrictModel):
     queryPlan: dict | None = None
     planner: Literal["local", "local_model", "deepseek"] | None = None
     generator: Literal["local", "deepseek"] | None = None
+    comparisons: list[ComparisonValue] | None = Field(default=None, max_length=50)
 
 
 class ConversationValue(StrictModel):

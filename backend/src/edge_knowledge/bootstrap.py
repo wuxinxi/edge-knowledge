@@ -28,6 +28,7 @@ from edge_knowledge.infrastructure.parsers import FileDocumentParser
 from edge_knowledge.infrastructure.payloads import FilePayloadStore
 from edge_knowledge.infrastructure.planner import DeepSeekQueryPlanner
 from edge_knowledge.infrastructure.settings import JsonSettingsStore
+from edge_knowledge.infrastructure.similarity import NumpySimilarityMatcher
 from edge_knowledge.infrastructure.sources import SQLiteSourceStore
 
 
@@ -76,6 +77,7 @@ def build_app(config: RuntimeConfig):
         AVMediaDecoder(),
         payloads,
         archive,
+        NumpySimilarityMatcher(),
     )
     runtime = LlamaRuntime(settings)
     chat = ChatService(

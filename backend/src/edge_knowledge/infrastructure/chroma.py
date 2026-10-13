@@ -252,6 +252,39 @@ class ChromaKnowledgeRepository:
             key=lambda chunk: chunk.index,
         )
 
+    def iter_vectors(self, library_id: str, document_ids: list[str]):
+        """Paged, explicitly scoped vector reads; empty IDs never mean the full library."""
+        collection = self._collection(library_id)
+        for start in range(0, len(document_ids), 256):
+            ids = document_ids[start : start + 256]
+            offset = 0
+            while True:
+                result = collection.get(
+                    where={"document_id": {"$in": ids}},
+                    limit=500,
+                    offset=offset,
+                    include=["documents", "metadatas", "embeddings"],
+                )
+                if not result["ids"]:
+                    break
+                for text, meta, vector in zip(
+                    result["documents"], result["metadatas"], result["embeddings"], strict=True
+                ):
+                    yield (
+                        SearchHit(
+                            meta["document_id"],
+                            meta["filename"],
+                            text,
+                            meta["section"],
+                            meta["index"],
+                            0,
+                            meta.get("kind", "document"),
+                            meta.get("ocr_status", "not_applicable"),
+                        ),
+                        vector.tolist(),
+                    )
+                offset += len(result["ids"])
+
     def vectors(self, library_id: str) -> list[tuple[SearchHit, list[float]]]:
         collection = self._collection(library_id)
         if collection.count() > 10000:

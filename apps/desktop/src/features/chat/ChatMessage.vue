@@ -5,6 +5,7 @@ import type { Message } from './store'
 import { useI18n } from '../../shared/i18n'
 import MarkdownAnswer from './MarkdownAnswer.vue'
 import AnswerSources from './AnswerSources.vue'
+import DuplicateMatches from './DuplicateMatches.vue'
 import type { TaskRecord } from '../tasks/store'
 import TaskFeedback from '../tasks/TaskFeedback.vue'
 const props = defineProps<{
@@ -36,7 +37,13 @@ async function copy() {
             .map((source, i) => `[${i + 1}] ${source.filename}\n${source.text}`)
             .join('\n\n')
         : props.message.content
-    await navigator.clipboard.writeText(text)
+    const comparisons = props.message.comparisons
+      ?.map(
+        (pair, index) =>
+          `候选 ${index + 1} · 相似度 ${pair.score}\n${pair.left.filename}\n${pair.left.text}\n\n${pair.right.filename}\n${pair.right.text}`,
+      )
+      .join('\n\n')
+    await navigator.clipboard.writeText(text + (comparisons ? '\n\n' + comparisons : ''))
     copied.value = true
     copyError.value = ''
   } catch {
@@ -65,15 +72,19 @@ async function copy() {
         ><strong>Edge Assistant</strong
         ><span class="assistant-mode">{{
           t(
-            message.planner === 'deepseek' && message.mode === 'search'
-              ? '本机结果 · AI 规划'
-              : message.planner === 'local_model' && message.mode === 'search'
-                ? '本机结果 · 本地模型规划'
-                : message.mode === 'search' || (generating && task?.phase === '查找资料')
-                  ? '本地检索'
-                  : message.generator === 'local'
-                    ? '本地模型回答'
-                    : 'DeepSeek 解读',
+            message.comparisons?.length
+              ? message.planner === 'deepseek'
+                ? '重复检查 · AI 规划'
+                : '本地重复检查'
+              : message.planner === 'deepseek' && message.mode === 'search'
+                ? '本机结果 · AI 规划'
+                : message.planner === 'local_model' && message.mode === 'search'
+                  ? '本机结果 · 本地模型规划'
+                  : message.mode === 'search' || (generating && task?.phase === '查找资料')
+                    ? '本地检索'
+                    : message.generator === 'local'
+                      ? '本地模型回答'
+                      : 'DeepSeek 解读',
           )
         }}</span
         ><span v-if="generating" class="assistant-stream-label"
@@ -106,6 +117,11 @@ async function copy() {
           {{ message.error || t('已停止。') }}
         </p>
         <p v-if="message.notice" class="answer-evidence-note">{{ message.notice }}</p>
+        <DuplicateMatches
+          v-if="message.comparisons?.length"
+          :pairs="message.comparisons"
+          :library="library"
+        />
         <AnswerSources
           ref="sourcesPanel"
           :sources="message.sources"
@@ -121,6 +137,11 @@ async function copy() {
             </summary>
             <MarkdownAnswer :content="version.content" :source-count="0" />
             <p v-if="version.error" class="inline-error">{{ version.error }}</p>
+            <DuplicateMatches
+              v-if="version.comparisons?.length"
+              :pairs="version.comparisons"
+              :library="library"
+            />
             <AnswerSources
               :sources="version.sources"
               :library="library"

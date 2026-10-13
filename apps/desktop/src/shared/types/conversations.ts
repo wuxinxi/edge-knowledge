@@ -1,4 +1,4 @@
-import type { Source } from './api'
+import type { Source, DuplicateComparison } from './api'
 export interface Reference {
   id: string
   filename: string
@@ -11,6 +11,7 @@ export interface AnswerVersion {
   savedAt: string
   planner?: 'local' | 'local_model' | 'deepseek'
   generator?: 'local' | 'deepseek'
+  comparisons?: DuplicateComparison[]
 }
 export interface Message {
   id: string
@@ -26,6 +27,7 @@ export interface Message {
   queryPlan?: import('./query').QuerySpec
   planner?: 'local' | 'local_model' | 'deepseek'
   generator?: 'local' | 'deepseek'
+  comparisons?: DuplicateComparison[]
 }
 export interface Conversation {
   id: string

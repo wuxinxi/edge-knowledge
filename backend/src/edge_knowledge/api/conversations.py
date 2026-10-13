@@ -17,6 +17,7 @@ class ReferenceBody(Strict):
 
 
 class SourceBody(Strict):
+    path: str | None = Field(default=None, max_length=4096)
     document_id: str = Field(min_length=1, max_length=100)
     filename: str = Field(max_length=255)
     text: str
@@ -29,6 +30,15 @@ class SourceBody(Strict):
     end: float | None = None
 
 
+class ComparisonBody(Strict):
+    left: SourceBody
+    right: SourceBody
+    score: float = Field(ge=-1, le=1)
+    exact: bool
+    body_exact: bool | None = None
+    content_similarity: float | None = Field(default=None, ge=0, le=1)
+
+
 class AnswerVersion(Strict):
     content: str
     sources: list[SourceBody]
@@ -37,6 +47,7 @@ class AnswerVersion(Strict):
     savedAt: str
     planner: Literal["local", "local_model", "deepseek"] | None = None
     generator: Literal["local", "deepseek"] | None = None
+    comparisons: list[ComparisonBody] | None = Field(default=None, max_length=50)
 
 
 class MessageBody(Strict):
@@ -53,6 +64,7 @@ class MessageBody(Strict):
     queryPlan: dict | None = None
     planner: Literal["local", "local_model", "deepseek"] | None = None
     generator: Literal["local", "deepseek"] | None = None
+    comparisons: list[ComparisonBody] | None = Field(default=None, max_length=50)
 
     @field_validator("queryPlan")
     @classmethod

@@ -2,7 +2,7 @@
   "scope": "Real local model + real embedding, isolated synthetic corpus; no cloud calls",
   "cases": {
     "grouped_month_count": {
-      "seconds": 1.47,
+      "seconds": 1.56,
       "count": 2,
       "missing_dates_reported": true,
       "planner": "local_model",
@@ -40,18 +40,28 @@
         "offset": 0,
         "text_query": "",
         "clarification": "",
+        "threshold": 0.9,
         "version": 1
       }
     },
     "missing_year": "clarified_without_model_or_cloud",
     "find_deployment": {
-      "filenames": ["部署流程.md"],
+      "filenames": [
+        "部署流程.md"
+      ],
       "location": "local"
     },
     "local_summary": {
-      "seconds": 1.55,
-      "answer": "根据提供的资料，部署步骤如下：\n1. 安装项目依赖。\n2. 启动本地服务。\n3. 检查服务健康状态。\n[1]",
+      "seconds": 1.71,
+      "answer": "根据提供的资料，部署步骤总结如下：\n[1] 安装项目依赖。\n[1] 启动本地服务。\n[1] 检查服务健康状态。",
       "generator": "local"
+    },
+    "duplicate_notes": {
+      "seconds": 0.54,
+      "exact_copy_found": true,
+      "comparisons": 1,
+      "location": "local",
+      "generation_called": false
     },
     "find_image": {
       "matches": 1,
@@ -59,5 +69,5 @@
       "location": "local"
     }
   },
-  "load_seconds": 2.22
+  "load_seconds": 1.93
 }

@@ -179,3 +179,36 @@ it('labels local model answers separately from local retrieval and cloud answers
   expect(root.querySelector('.assistant-mode')?.textContent).toContain('本地模型回答')
   expect(root.querySelector('.assistant-mode')?.textContent).not.toContain('DeepSeek')
 })
+
+it('shows duplicate notes side by side with safe excerpts and distinguishes exact matches', async () => {
+  const source = {
+    document_id: 'left',
+    filename: 'index.md',
+    path: 'notes/部署/index.md',
+    text: '# 部署\n\n安装依赖。<script>alert(1)</script>',
+    section: '查重',
+    index: 0,
+    score: 1,
+  }
+  await mount({
+    id: 'comparison',
+    role: 'assistant',
+    mode: 'search',
+    content: '发现 1 对候选',
+    sources: [],
+    comparisons: [
+      {
+        left: source,
+        right: { ...source, document_id: 'right', path: 'archive/部署/index.md' },
+        score: 1,
+        exact: true,
+      },
+    ],
+  })
+  expect(root.querySelectorAll('.duplicate-match-side')).toHaveLength(2)
+  expect(root.textContent).toContain('内容一致')
+  expect(root.textContent).toContain('notes/部署/index.md')
+  expect(root.textContent).toContain('archive/部署/index.md')
+  expect(root.querySelector('script')).toBeNull()
+  expect(root.querySelector('dialog[open]')).toBeNull()
+})

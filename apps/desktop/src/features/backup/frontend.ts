@@ -54,6 +54,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
           !Number.isInteger(source.index) ||
           source.index < 0 ||
           !Number.isFinite(source.score) ||
+          (source.path !== undefined && !string(source.path, 4096)) ||
           (source.kind && !['document', 'image', 'audio', 'video', 'bundle'].includes(source.kind))
         )
           throw new Error('对话来源格式无效。')
@@ -61,6 +62,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
           if (time !== undefined && (!Number.isFinite(time) || time < 0))
             throw new Error('媒体时间格式无效。')
         return {
+          ...(source.path ? { path: source.path } : {}),
           document_id: source.document_id,
           filename: source.filename,
           text: source.text,
@@ -75,11 +77,58 @@ export function validateChatBackup(value: unknown): Conversation[] {
           ...(source.end === undefined ? {} : { end: source.end }),
         }
       })
+      if (
+        message.comparisons &&
+        (!Array.isArray(message.comparisons) || message.comparisons.length > 50)
+      )
+        throw new Error('查重对比格式无效。')
+      const comparisons = message.comparisons?.map((pair) => {
+        if (
+          !pair ||
+          !Number.isFinite(pair.score) ||
+          pair.score < -1 ||
+          pair.score > 1 ||
+          typeof pair.exact !== 'boolean' ||
+          (pair.body_exact !== undefined && typeof pair.body_exact !== 'boolean') ||
+          (pair.content_similarity !== undefined &&
+            (!Number.isFinite(pair.content_similarity) ||
+              pair.content_similarity < 0 ||
+              pair.content_similarity > 1))
+        )
+          throw new Error('查重对比格式无效。')
+        const validated = validateChatBackup({
+          version: 1,
+          sessions: [
+            {
+              ...chat,
+              messages: [
+                {
+                  ...message,
+                  sources: [pair.left, pair.right],
+                  comparisons: undefined,
+                  versions: undefined,
+                },
+              ],
+            },
+          ],
+        })[0]!.messages[0]!.sources
+        return {
+          left: validated[0]!,
+          right: validated[1]!,
+          score: pair.score,
+          exact: pair.exact,
+          ...(typeof pair.body_exact === 'boolean' ? { body_exact: pair.body_exact } : {}),
+          ...(Number.isFinite(pair.content_similarity)
+            ? { content_similarity: pair.content_similarity }
+            : {}),
+        }
+      })
       return {
         id: message.id,
         role: message.role,
         content: message.content,
         sources,
+        ...(comparisons ? { comparisons } : {}),
         ...(message.queryPlan ? { queryPlan: structuredClone(message.queryPlan) } : {}),
         ...(message.generator === 'local' || message.generator === 'deepseek'
           ? { generator: message.generator }
@@ -109,6 +158,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                           content: version.content,
                           sources: version.sources,
                           versions: undefined,
+                          comparisons: version.comparisons,
                         },
                       ],
                     },
@@ -117,6 +167,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                 return {
                   content: version.content,
                   sources: nested.sources,
+                  ...(nested.comparisons ? { comparisons: nested.comparisons } : {}),
                   savedAt: version.savedAt,
                   ...(version.generator === 'local' || version.generator === 'deepseek'
                     ? { generator: version.generator }

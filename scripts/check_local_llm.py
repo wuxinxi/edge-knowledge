@@ -28,6 +28,7 @@ def main():
             RuntimeConfig(
                 data_dir=Path(directory),
                 backend_token="local-acceptance-token",
+                deepseek_api_key="",
                 local_model_path=args.model_path.resolve(),
                 prepared_model_dir=args.embedding_path.resolve(),
             )
@@ -124,6 +125,44 @@ def main():
                 "seconds": round(time.monotonic() - start, 2),
                 "answer": answer,
                 "generator": "local",
+            }
+
+            # The copy differs only in filename, so content identity is independently verifiable.
+            copy_text = "---\ncreatedAt: 2026-09-02\ntags: [工作, 技术]\n---\n# 部署步骤\n1. 安装项目依赖。\n2. 启动本地服务。\n3. 检查服务健康状态。"
+            copy = client.post(
+                "/api/libraries/default/documents",
+                files={"file": ("部署流程-副本.md", copy_text.encode())},
+            )
+            assert copy.status_code == 201, copy.text
+            start = time.monotonic()
+            response = client.post(
+                "/api/query",
+                json={"question": "这些笔记有没有重复的？", "allow_planning": True},
+            )
+            events = [
+                json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            assert not any(event["type"] == "error" for event in events), events
+            comparisons = next(
+                event["comparisons"]
+                for event in events
+                if event["type"] == "comparisons"
+            )
+            assert any(
+                pair["exact"]
+                and {pair["left"]["filename"], pair["right"]["filename"]}
+                == {"部署流程.md", "部署流程-副本.md"}
+                for pair in comparisons
+            ), comparisons
+            assert not any(event.get("generator") for event in events), events
+            report["cases"]["duplicate_notes"] = {
+                "seconds": round(time.monotonic() - start, 2),
+                "exact_copy_found": True,
+                "comparisons": len(comparisons),
+                "location": "local",
+                "generation_called": False,
             }
 
             image = Image.new("RGB", (900, 220), "white")

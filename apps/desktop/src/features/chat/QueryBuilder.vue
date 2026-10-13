@@ -80,6 +80,7 @@ function execute() {
             >{{ t('操作')
             }}<select v-model="draft.operation">
               <option value="list">{{ t('筛选资料') }}</option>
+              <option value="duplicates">{{ t('对比重复笔记') }}</option>
               <option value="aggregate">{{ t('统计与计算') }}</option>
             </select></label
           >

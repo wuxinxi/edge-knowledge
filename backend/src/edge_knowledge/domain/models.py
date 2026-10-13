@@ -114,6 +114,7 @@ class QueryPlan:
     history: list[HistoryMessage] = field(default_factory=list, repr=False)
     planner: str = "local"
     provider: str = "deepseek"
+    comparisons: list[dict] = field(default_factory=list)
 
 
 class AppError(Exception):

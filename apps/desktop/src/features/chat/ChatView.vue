@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import {
   ArrowUp,
+  Copy,
   ShieldCheck,
   Database,
   FileText,
@@ -78,6 +79,13 @@ const conversation = computed(() => chat.current(app.activeLibrary))
 const messages = computed(() => conversation.value?.messages ?? [])
 const references = computed(() => conversation.value?.references ?? [])
 // The /new command remains available without duplicating visible navigation.
+function checkDuplicates() {
+  void chat.ask(app.activeLibrary, t('检查当前资料范围的重复笔记'), 'search', false, {
+    version: 1,
+    operation: 'duplicates',
+    threshold: 0.9,
+  })
+}
 function newChat() {
   if (conversation.value && !messages.value.length) return
   chat.create(app.activeLibrary)
@@ -290,6 +298,14 @@ watch(
             </button>
           </div>
           <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
+          <button
+            type="button"
+            class="query-builder-trigger"
+            :disabled="chat.busy || !app.health"
+            @click="checkDuplicates"
+          >
+            <Copy :size="13" />{{ t('检查重复') }}
+          </button>
         </div>
         <ComposerInput
           ref="composerInput"

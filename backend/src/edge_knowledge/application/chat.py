@@ -32,7 +32,14 @@ class ChatService:
         self.semantic = semantic
         self.local_runtime = local_runtime
         self.queries = (
-            QueryService(knowledge, catalog, self._retrieve, planner, local_planner)
+            QueryService(
+                knowledge,
+                catalog,
+                self._retrieve,
+                planner,
+                local_planner,
+                semantic.duplicates if semantic else None,
+            )
             if catalog
             else None
         )
@@ -188,6 +195,7 @@ class ChatService:
                 notice=resolved["notice"],
                 planner=resolved.get("query", {}).get("planner", "local"),
                 provider=provider,
+                comparisons=resolved.get("comparisons", []),
             )
         previous = next((item.content for item in reversed(history) if item.role == "user"), "")
         retrieval_question = contextual_question(question, previous)
@@ -321,6 +329,8 @@ class ChatService:
             **({"planner": plan.planner} if plan.planner != "local" else {}),
             **({"generator": plan.provider} if plan.local_answer is None else {}),
         }
+        if plan.comparisons:
+            yield {"type": "comparisons", "comparisons": plan.comparisons}
         if plan.notice:
             yield {"type": "notice", "message": plan.notice}
         if plan.local_answer:

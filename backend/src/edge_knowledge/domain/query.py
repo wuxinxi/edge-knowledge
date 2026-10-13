@@ -124,6 +124,7 @@ class QuerySpec:
     offset: int = 0
     text_query: str = ""
     clarification: str = ""
+    threshold: float = 0.9
     version: int = 1
 
     @classmethod
@@ -156,6 +157,7 @@ class QuerySpec:
                 "search",
                 "answer",
                 "clarify",
+                "duplicates",
             }
         ):
             raise AppError("查询操作不支持。", 422, "invalid_query_plan")
@@ -197,6 +199,18 @@ class QuerySpec:
             raise AppError("查询参数无效。", 422, "invalid_query_plan")
         if not isinstance(plan.clarification, str) or len(plan.clarification) > 1000:
             raise AppError("澄清信息无效。", 422, "invalid_query_plan")
+        if (
+            type(plan.threshold) not in {int, float}
+            or not finite(plan.threshold)
+            or not 0 <= plan.threshold <= 1
+        ):
+            raise AppError("查重相似度需要 0–1 的有效数值。", 422, "invalid_query_plan")
+        if plan.operation == "duplicates" and plan.text_query:
+            raise AppError(
+                "查重范围需要明确筛选条件，不能用语义前几条代替全库范围。",
+                422,
+                "invalid_query_plan",
+            )
         if plan.operation == "aggregate" and plan.text_query:
             raise AppError(
                 "语义相似度不能作为全量精确统计条件，请使用明确的文字或标签筛选。",
@@ -213,7 +227,7 @@ def query_contract() -> dict:
     """Shared planner contract; the executor still validates every returned field."""
     return {
         "version": 1,
-        "operations": ["list", "aggregate", "search", "answer", "clarify"],
+        "operations": ["list", "aggregate", "search", "answer", "clarify", "duplicates"],
         "fields": sorted(FIELDS) + ["metadata.<flat scalar key>"],
         "kind_values": ["document", "image", "audio", "video", "bundle"],
         "where": {
@@ -221,6 +235,8 @@ def query_contract() -> dict:
                 {"field": "allowed field", "op": sorted(OPS), "value": "scalar or list for in"}
             ]
         },
+        "duplicates": "Read-only note comparison in full filtered scope; cutoff 0.9; no deletion",
+        "threshold": "0..1 similarity cutoff, not a probability",
         "metric": ["count", "sum", "avg", "min", "max"],
         "metric_field": sorted(NUMERIC_FIELDS) + ["metadata.<numeric key>"],
         "group_by": [

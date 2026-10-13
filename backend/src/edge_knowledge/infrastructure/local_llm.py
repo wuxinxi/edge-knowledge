@@ -26,6 +26,8 @@ from edge_knowledge.infrastructure.deepseek import SYSTEM_PROMPT
 def local_planning_messages(question: str, context: dict) -> list:
     prompt = (
         "只输出只读查询 JSON 计划，不直接回答。统计用 aggregate，检索用 search，总结用 answer。"
+        "检查笔记/文档重复内容用 duplicates；threshold 默认0.9，禁止删除。"
+        "duplicates 的 text_query 必须为空，日期、标签、文件夹范围用 where。"
         "月份筛选用 gte 起始日和 lt 次月1日，不能用 in 列表。"
         "created_date 创建日期，authored_date 写作日期，modified_date 修改日期。"
         "必须完整保留 required_date_conditions；未提供年份须 clarify，禁止猜测。"
@@ -71,6 +73,15 @@ def local_planning_messages(question: str, context: dict) -> list:
             },
         ),
     ]
+    examples.append(
+        (
+            "这些笔记有没有重复的？",
+            {
+                "operation": "duplicates",
+                "where": {"field": "kind", "op": "eq", "value": "document"},
+            },
+        )
+    )
     if context.get("allow_answer", True):
         examples.append(
             (
@@ -330,10 +341,11 @@ def planning_schema(context: dict) -> dict:
         "type": "object",
         "$defs": {"predicate": predicate},
         "properties": {
+            "threshold": {"type": "number", "minimum": 0, "maximum": 1},
             "version": {"const": 1},
             "operation": {
                 "type": "string",
-                "enum": ["search", "answer", "aggregate", "list", "clarify"],
+                "enum": ["search", "answer", "aggregate", "list", "clarify", "duplicates"],
             },
             "where": {"$ref": "#/$defs/predicate"},
             "text_query": {"type": "string"},

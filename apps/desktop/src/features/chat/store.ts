@@ -363,6 +363,7 @@ export const useChatStore = defineStore('chat', () => {
         const result = queryPlan
           ? await api.localQuery(...args, queryPlan)
           : await api.localQuery(...args)
+        answer.comparisons = result.comparisons
         answer.sources = result.sources
         answer.content =
           result.kind === 'retrieval' &&
@@ -387,6 +388,10 @@ export const useChatStore = defineStore('chat', () => {
           ...(queryPlan ? { queryPlan } : {}),
         },
       )) {
+        if (event.type === 'comparisons') {
+          answer.comparisons = event.comparisons
+          tasks.update(feedback, { phase: '比较资料' })
+        }
         if (event.type === 'sources') {
           answer.sources = event.sources
           tasks.update(feedback, { phase: '生成回答' })
@@ -453,6 +458,7 @@ export const useChatStore = defineStore('chat', () => {
       savedAt: new Date().toISOString(),
       planner: original.planner,
       generator: original.generator,
+      comparisons: original.comparisons,
     })
     answer.status = 'streaming'
     answer.content = ''
@@ -461,6 +467,7 @@ export const useChatStore = defineStore('chat', () => {
     answer.notice = undefined
     answer.planner = undefined
     answer.generator = undefined
+    answer.comparisons = undefined
     session.updatedAt = new Date().toISOString()
     await runAnswer(
       library,
@@ -483,6 +490,7 @@ export const useChatStore = defineStore('chat', () => {
           savedAt: new Date().toISOString(),
           planner: original.planner,
           generator: original.generator,
+          comparisons: original.comparisons,
         })
       }
       const versions = answer.versions

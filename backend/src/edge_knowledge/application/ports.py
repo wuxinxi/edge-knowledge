@@ -41,6 +41,10 @@ class DocumentParser(Protocol):
 
 
 class KnowledgeRepository(Protocol):
+    def iter_vectors(
+        self, library_id: str, document_ids: list[str]
+    ) -> Iterable[tuple[SearchHit, list[float]]]: ...
+
     def lexical_candidates(
         self,
         library_id: str,
@@ -192,3 +196,15 @@ class LocalModelRuntime(Protocol):
     def status(self) -> dict: ...
     def load(self) -> dict: ...
     def close(self) -> None: ...
+
+
+class SimilarityMatcher(Protocol):
+    def match(
+        self,
+        vectors: list[list[float]],
+        fingerprints: list[str],
+        threshold: float,
+        limit: int,
+        offset: int,
+        texts: list[str] | None = None,
+    ) -> dict: ...

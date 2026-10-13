@@ -543,6 +543,7 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "scikit-learn" },
     { name = "tzdata" },
     { name = "uvicorn" },
 ]
@@ -586,6 +587,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "rapidocr-onnxruntime", marker = "extra == 'ocr'", specifier = "==1.4.4" },
+    { name = "scikit-learn", specifier = ">=1.7,<2" },
     { name = "sentence-transformers", marker = "extra == 'embedding'", specifier = ">=6.1,<7" },
     { name = "torch", marker = "extra == 'embedding'", specifier = ">=2.8,<3" },
     { name = "torchvision", marker = "extra == 'embedding'", specifier = ">=0.23,<1" },

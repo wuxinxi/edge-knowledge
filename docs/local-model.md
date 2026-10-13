@@ -19,13 +19,13 @@
 - 输出严格区分本地规划、本地生成、云端规划和云端生成；来源标签随会话、历史回答和备份保存。
 - 通过运行程序的 apply-template 与 tokenize 检查实际本地模型上下文，并预留生成空间；超限报错，不截断原始会话或偷偷省略证据。达到生成长度上限会在回答中说明。
 - 当前 GGUF 适配器仅声明文字能力。图片查找由 EmbeddingGemma 与已保存 OCR 完成；图中文字可交给本地文字模型解读。没有接入视觉投影器，不能把它当作原生看图模型。音视频检索不等于转录与生成理解。
-- 查询规划器只执行已有的只读查询操作。重复对比、分类与聚类仍由工作台提供，尚未完整接入聊天工具调度；接入本地模型不能据此宣称所有自然语言任务完成。
+- 查询规划器只执行已有的只读查询操作。文档/笔记重复比较已接入聊天，分类、聚类和媒体整理仍由工作台提供；接入本地模型不能据此宣称所有自然语言任务完成。见 [聊天重复比较](chat-duplicates.md)。
 - 打包发行还需提供对应平台的 llama-server 或明确安装要求；Windows/Linux、干净机器与正式安装包未做本轮实机验收。正常退出之外的强制杀进程/断电恢复属于既有发行与后台作业待办。
 
 llama.cpp 的接口与 JSON schema 约束参考[官方 server 文档](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)。模型运行方式参考 [MiniCPM5-2B-GGUF 模型卡](https://huggingface.co/openbmb/MiniCPM5-2B-GGUF)。
 
 ## 验收
 
-`scripts/check_local_llm.py` 显式接受 GGUF 与嵌入模型路径，在临时目录建立演示库。实际运行真实 MiniCPM 与真实 EmbeddingGemma：月份创建统计、标签分组、缺少日期报告、年份澄清、部署步骤查找、本地带引用总结、目标图片检索通过；未配置云端密钥或调用云端。报告见 [local-model-acceptance.json](local-model-acceptance.json)。这些是隔离样例，不代表任意真实语料的质量保证。
+`scripts/check_local_llm.py` 显式接受 GGUF 与嵌入模型路径，在临时目录建立演示库。实际运行真实 MiniCPM 与真实 EmbeddingGemma：月份创建统计、标签分组、缺少日期报告、年份澄清、部署步骤查找、本地带引用总结、目标图片检索、笔记副本比较通过；未配置云端密钥或调用云端。报告见 [local-model-acceptance.json](local-model-acceptance.json)。这些是隔离样例，不代表任意真实语料的质量保证。
 
 浏览器实测模型保存/加载、默认本地助手、完整回答与刷新后来源恢复。截图为 `previews/local-model-settings.png` 和 `previews/local-model-answer.png`，均为演示数据。

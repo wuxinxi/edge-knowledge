@@ -25,7 +25,7 @@ export interface FilterDraft {
   custom: string
 }
 export interface QueryDraft {
-  operation: 'list' | 'aggregate'
+  operation: 'list' | 'aggregate' | 'duplicates'
   logic: 'all' | 'any'
   filters: FilterDraft[]
   metric: NonNullable<QuerySpec['metric']>
@@ -78,7 +78,7 @@ export function buildQuery(draft: QueryDraft): QuerySpec {
             draft.metricField.startsWith('metadata.')
           ? draft.metricField.trim()
           : `metadata.${draft.metricField.trim()}`,
-    group_by: draft.group,
+    group_by: draft.operation === 'aggregate' ? draft.group : '',
     group_date: draft.date,
     order_by: draft.order,
     descending: draft.descending,
@@ -88,15 +88,17 @@ export function buildQuery(draft: QueryDraft): QuerySpec {
 }
 export function queryLabel(draft: QueryDraft) {
   const action =
-    draft.operation === 'list'
-      ? '筛选资料'
-      : {
-          count: '统计资料数量',
-          sum: '计算合计',
-          avg: '计算平均值',
-          min: '查询最小值',
-          max: '查询最大值',
-        }[draft.metric]
+    draft.operation === 'duplicates'
+      ? '检查重复笔记'
+      : draft.operation === 'list'
+        ? '筛选资料'
+        : {
+            count: '统计资料数量',
+            sum: '计算合计',
+            avg: '计算平均值',
+            min: '查询最小值',
+            max: '查询最大值',
+          }[draft.metric]
   const fieldLabel =
     queryFields.find(([key]) => key === draft.metricField)?.[1] ??
     draft.metricField.replace(/^metadata\./, '')
@@ -108,7 +110,7 @@ export function queryLabel(draft: QueryDraft) {
     folder: '按文件夹',
     extension: '按文件类型',
   }
-  const groupLabel = groupLabels[draft.group] ?? ''
+  const groupLabel = draft.operation === 'aggregate' ? (groupLabels[draft.group] ?? '') : ''
   const metricLabel =
     draft.operation === 'aggregate' && draft.metric !== 'count' ? ' ' + fieldLabel : ''
   const kindLabels: Record<string, string> = {

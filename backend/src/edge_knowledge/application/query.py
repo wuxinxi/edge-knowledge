@@ -103,9 +103,11 @@ class QueryService:
         search: Callable,
         planner: QueryPlanner | None = None,
         local_planner: QueryPlanner | None = None,
+        compare: Callable | None = None,
     ):
         self.knowledge, self.mirror, self.search, self.planner = knowledge, mirror, search, planner
         self.local_planner = local_planner
+        self.compare = compare
 
     def schema(self, library: str, ids: list[str]):
         with self.knowledge.transaction():
@@ -219,6 +221,8 @@ class QueryService:
                     "sources": [],
                     "notice": self._notice(planned),
                 }
+            if spec.operation == "duplicates":
+                return self._duplicates(library, documents, spec, ids, timezone, planned)
             self.mirror.ensure(library, documents)
             result = self.mirror.catalog.query(library, spec, ids, timezone)
             if spec.operation in {"search", "answer"}:
@@ -294,6 +298,48 @@ class QueryService:
                     "date_alternatives": alternatives,
                 },
             }
+
+    def _duplicates(self, library, documents, spec, ids, timezone, planned):
+        if not self.compare:
+            raise AppError("文档查重执行器尚未配置。", 503, "duplicate_tool_unavailable")
+        # This tool's declared scope is document notes, not arbitrary media or a top-k search.
+        spec = replace(spec, where=Predicate(all=(spec.where, Predicate("kind", "eq", "document"))))
+        self.mirror.ensure(library, documents)
+        selected = self.mirror.catalog.query(library, spec, ids, timezone)["selected_ids"]
+        result = self.compare(library, selected, spec.threshold, spec.limit, spec.offset)
+        content = f"已比较 **{result['scanned']} 份**文档笔记。"
+        if result["total"]:
+            content += (
+                f"发现 **{result['total']} 对**重复或相似候选，"
+                f"涉及 {result['candidate_documents']} 份资料。"
+            )
+            if result["pairs"]:
+                content += (
+                    "\n\n当前展示第 "
+                    f"{spec.offset + 1}–{spec.offset + len(result['pairs'])} 对；"
+                    f"相似度阈值 {spec.threshold:g}。"
+                )
+            else:
+                content += "\n\n当前页没有候选，请在筛选面板中调整跳过数量。"
+        else:
+            content += f"没有找到达到相似度阈值 {spec.threshold:g} 的候选。"
+        content += (
+            "\n\n正文一致的候选直接保留；其余候选同时核对向量与正文文字。"
+            "相似度不是重复概率，请对照判断。此次未修改资料。"
+        )
+        return {
+            "kind": "comparison",
+            "content": content,
+            "sources": [],
+            "comparisons": result["pairs"],
+            "notice": self._notice(planned)
+            + " 查重读取当前资料的已有向量，不重新嵌入；仅比较文档笔记。",
+            "query": {
+                "plan": spec.mapping(),
+                "planner": planned,
+                "result": {key: value for key, value in result.items() if key != "pairs"},
+            },
+        }
 
     @staticmethod
     def _notice(planned: str) -> str:

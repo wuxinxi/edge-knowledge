@@ -1,4 +1,4 @@
-export type QueryOperation = 'list' | 'aggregate' | 'search' | 'answer' | 'clarify'
+export type QueryOperation = 'list' | 'aggregate' | 'search' | 'answer' | 'clarify' | 'duplicates'
 export interface QueryFilter {
   field?: string
   op?: 'eq' | 'ne' | 'contains' | 'in' | 'gt' | 'gte' | 'lt' | 'lte' | 'exists' | 'missing'
@@ -20,4 +20,5 @@ export interface QuerySpec {
   offset?: number
   text_query?: string
   clarification?: string
+  threshold?: number
 }

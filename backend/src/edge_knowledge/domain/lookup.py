@@ -12,6 +12,12 @@ class Lookup:
 
 def local_lookup(question: str) -> Lookup | None:
     text = question.strip()
+    if re.search(
+        r"查重|去重|重复|分类|归类|聚类|\b(?:duplicates?|deduplicate|classify|cluster)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return None
     prefix = r"^(?:请帮我|帮我|请|麻烦)?\s*"
     if re.search(prefix + r"(?:总结|解释|分析|比较|对比|解读|翻译|改写|推荐)", text) or re.search(
         r"(?:并|然后|再)(?:帮我)?(?:分析|总结|解释|解读)|^(?:explain|summarize|analyse|analyze|compare)\b",
