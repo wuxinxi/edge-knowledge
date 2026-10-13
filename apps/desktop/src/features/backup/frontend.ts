@@ -11,8 +11,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
   if (value === undefined || value === null) return []
   if (typeof value !== 'object') throw new Error('对话备份格式无效。')
   const data = value as { version?: unknown; sessions?: unknown }
-  if (data.version !== 1 || !Array.isArray(data.sessions) || data.sessions.length > 500)
-    throw new Error('对话备份格式无效或超过 500 个对话。')
+  if (data.version !== 1 || !Array.isArray(data.sessions)) throw new Error('对话备份格式无效。')
   const ids = new Set<string>()
   return data.sessions.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('对话备份格式无效。')
@@ -25,7 +24,6 @@ export function validateChatBackup(value: unknown): Conversation[] {
       !string(chat.createdAt, 100) ||
       !string(chat.updatedAt, 100) ||
       !Array.isArray(chat.messages) ||
-      chat.messages.length > 2000 ||
       !Array.isArray(chat.references) ||
       chat.references.length > 10
     )
@@ -41,7 +39,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
         !message ||
         !string(message.id, 100) ||
         !['user', 'assistant'].includes(message.role) ||
-        !string(message.content, 200000) ||
+        typeof message.content !== 'string' ||
         !Array.isArray(message.sources) ||
         message.sources.length > 50
       )
@@ -51,7 +49,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
           !source ||
           !string(source.document_id, 100) ||
           !string(source.filename, 255) ||
-          !string(source.text, 200000) ||
+          typeof source.text !== 'string' ||
           !string(source.section, 20000) ||
           !Number.isInteger(source.index) ||
           source.index < 0 ||
@@ -82,6 +80,56 @@ export function validateChatBackup(value: unknown): Conversation[] {
         role: message.role,
         content: message.content,
         sources,
+        ...(message.queryPlan ? { queryPlan: structuredClone(message.queryPlan) } : {}),
+        ...(message.generator === 'local' || message.generator === 'deepseek'
+          ? { generator: message.generator }
+          : {}),
+        ...(['local', 'local_model', 'deepseek'].includes(String(message.planner))
+          ? { planner: message.planner as Message['planner'] }
+          : {}),
+        ...(message.status ? { status: message.status } : {}),
+        ...(message.versions
+          ? {
+              versions: message.versions.map((version) => {
+                if (
+                  !version ||
+                  typeof version.content !== 'string' ||
+                  !Array.isArray(version.sources) ||
+                  !string(version.savedAt, 100)
+                )
+                  throw new Error('历史回答格式无效。')
+                const nested = validateChatBackup({
+                  version: 1,
+                  sessions: [
+                    {
+                      ...chat,
+                      messages: [
+                        {
+                          ...message,
+                          content: version.content,
+                          sources: version.sources,
+                          versions: undefined,
+                        },
+                      ],
+                    },
+                  ],
+                })[0]!.messages[0]!
+                return {
+                  content: version.content,
+                  sources: nested.sources,
+                  savedAt: version.savedAt,
+                  ...(version.generator === 'local' || version.generator === 'deepseek'
+                    ? { generator: version.generator }
+                    : {}),
+                  ...(['local', 'local_model', 'deepseek'].includes(String(version.planner))
+                    ? { planner: version.planner as Message['planner'] }
+                    : {}),
+                  ...(string(version.error, 2000) ? { error: version.error } : {}),
+                  ...(string(version.notice, 4000) ? { notice: version.notice } : {}),
+                }
+              }),
+            }
+          : {}),
         ...(message.references ? { references: message.references.map(reference) } : {}),
         ...(message.mode === 'chat' || message.mode === 'search' ? { mode: message.mode } : {}),
         ...(string(message.error, 2000) ? { error: message.error } : {}),
@@ -92,6 +140,9 @@ export function validateChatBackup(value: unknown): Conversation[] {
       id: chat.id,
       library: chat.library,
       title: chat.title,
+      ...(chat.titleSource === 'auto' || chat.titleSource === 'manual'
+        ? { titleSource: chat.titleSource }
+        : {}),
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
       messages,
@@ -108,8 +159,8 @@ export function portableFrontend(chats: Conversation[], preferences: Preferences
     },
     preferences: validatePreferences(preferences),
   }
-  if (new TextEncoder().encode(JSON.stringify(result)).length > 3 * 1024 * 1024)
-    throw new Error('对话备份超过 3 MB，请先分开导出较长对话。')
+  if (new TextEncoder().encode(JSON.stringify(result)).length > 64 * 1024 * 1024)
+    throw new Error('对话备份超过 64 MB，请先分开导出较长对话。')
   return result
 }
 export function restoredChats(value: unknown, mapping: Record<string, string>) {

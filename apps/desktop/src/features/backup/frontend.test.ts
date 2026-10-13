@@ -56,3 +56,32 @@ describe('portable conversation backups', () => {
     expect(result.preferences.fontSize).toBe(13)
   })
 })
+
+it('exports full long messages and previous answer versions without truncation', () => {
+  const content = '完整文字\n'.repeat(40000)
+  const chat = {
+    ...conversation,
+    titleSource: 'manual' as const,
+    messages: [
+      {
+        ...conversation.messages[0]!,
+        content,
+        status: 'complete' as const,
+        versions: [
+          {
+            content,
+            sources: conversation.messages[0]!.sources,
+            savedAt: '2026',
+            notice: '旧回答',
+          },
+        ],
+      },
+    ],
+  }
+  const result = portableFrontend([chat], preferenceDefaults)
+  const restored = restoredChats(result.chats, { default: 'copy' })[0]!
+  expect(restored.messages[0]!.content).toBe(content)
+  expect(restored.messages[0]!.versions![0]!.content).toBe(content)
+  expect(restored.messages[0]!.versions![0]!.notice).toBe('旧回答')
+  expect(restored.titleSource).toBe('manual')
+})

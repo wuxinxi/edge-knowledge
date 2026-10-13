@@ -4,7 +4,9 @@ import { api } from '../../shared/api/client'
 import { useChatStore, boundedHistory } from './store'
 import { memoryStorage } from '../../shared/preferences/test-storage'
 
-vi.mock('../../shared/api/client', () => ({ api: { search: vi.fn(), query: vi.fn() } }))
+vi.mock('../../shared/api/client', () => ({
+  api: { localQuery: vi.fn(), query: vi.fn(), loadChatState: vi.fn(), saveChatState: vi.fn() },
+}))
 beforeEach(() => {
   vi.stubGlobal('localStorage', memoryStorage())
   setActivePinia(createPinia())
@@ -12,35 +14,109 @@ beforeEach(() => {
 })
 
 it('local search shows evidence without calling cloud generation', async () => {
-  vi.mocked(api.search).mockResolvedValue([
-    {
-      document_id: 'doc-1',
-      filename: 'plan.md',
-      text: '项目计划',
-      section: '计划',
-      index: 0,
-      score: 0.9,
-    },
-  ])
+  vi.mocked(api.localQuery).mockResolvedValue({
+    content: '找到 1 份相关资料，结果如下。',
+    notice: '本地检索',
+    sources: [
+      {
+        document_id: 'doc-1',
+        filename: 'plan.md',
+        text: '项目计划',
+        section: '计划',
+        index: 0,
+        score: 0.9,
+      },
+    ],
+  })
   const store = useChatStore()
   await store.ask('library-one', '项目计划', 'search')
   expect(api.query).not.toHaveBeenCalled()
   expect(store.conversations['library-one']![1]!.sources[0]!.filename).toBe('plan.md')
-  expect(store.conversations['library-one']![1]!.content).toContain('1 个相关片段')
+  expect(store.conversations['library-one']![1]!.content).toContain('1 份相关资料')
   expect(store.conversations['library-two']).toBeUndefined()
   expect(store.busy).toBe(false)
 })
 
+it('persists the full local statistics answer rather than replacing it with the preview count', async () => {
+  const content = '2026 年 9 月匹配 **23 篇**。仅预览前 20 份依据。'
+  vi.mocked(api.localQuery).mockResolvedValue({ content, sources: [], notice: '不调用 DeepSeek' })
+  const store = useChatStore()
+  await store.ask('default', '2026 年 9 月写了多少篇笔记')
+  expect(store.current('default')!.messages[1]!.content).toBe(content)
+  expect(store.current('default')!.messages[1]!.status).toBe('complete')
+  expect(api.query).not.toHaveBeenCalled()
+  setActivePinia(createPinia())
+  expect(useChatStore().current('default')!.messages[1]!.content).toBe(content)
+})
+
+it('preserves structured query conditions across saving and retrying without switching on AI', async () => {
+  vi.mocked(api.localQuery).mockResolvedValue({
+    content: '匹配 2 篇',
+    sources: [],
+    notice: '本机统计',
+  })
+  const store = useChatStore()
+  const plan = {
+    operation: 'aggregate' as const,
+    where: { field: 'tags', op: 'eq' as const, value: 'work' },
+  }
+  await store.ask('default', '按 work 标签统计', 'search', false, plan)
+  const session = store.current('default')!
+  expect(session.messages[0]!.queryPlan).toEqual(plan)
+  await store.retry('default', session.messages[1]!.id)
+  expect(api.localQuery).toHaveBeenLastCalledWith(
+    'default',
+    '按 work 标签统计',
+    expect.any(AbortSignal),
+    [],
+    plan,
+  )
+  expect(api.query).not.toHaveBeenCalled()
+  setActivePinia(createPinia())
+  expect(useChatStore().current('default')!.messages[0]!.queryPlan).toEqual(plan)
+})
+
 it('empty local search explains the result without pretending to generate an answer', async () => {
-  vi.mocked(api.search).mockResolvedValue([])
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
   const store = useChatStore()
   await store.ask('default', '没有的资料', 'search')
   expect(store.conversations.default![1]!.content).toContain('没有找到相关资料')
   expect(api.query).not.toHaveBeenCalled()
 })
 
+it('defaults to local search and persists the explicit local execution notice', async () => {
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
+  const store = useChatStore()
+  await store.ask('default', '帮我检索本地图片')
+  expect(api.query).not.toHaveBeenCalled()
+  expect(store.current('default')!.messages[1]!.mode).toBe('search')
+  expect(store.current('default')!.messages[1]!.notice).toContain('不调用 DeepSeek')
+})
+
+it('uses the backend execution event to label a locally answered query accurately', async () => {
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'sources', sources: [] }
+    yield { type: 'execution', location: 'local' }
+    yield { type: 'notice', message: '本次仅在本机检索' }
+    yield { type: 'delta', delta: '没有找到相关资料。' }
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '帮我检索本地图片', 'chat')
+  expect(store.current('default')!.messages[1]!.mode).toBe('search')
+  expect(store.current('default')!.messages[1]!.status).toBe('complete')
+})
+
 it('stopping a pending search cancels its transport and clears the busy state', async () => {
-  vi.mocked(api.search).mockImplementation(
+  vi.mocked(api.localQuery).mockImplementation(
     (_library, _question, signal) =>
       new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')))
@@ -84,7 +160,11 @@ it('an explicit image authorization applies to that request only', async () => {
 })
 
 it('keeps separate chats, persists them, and restores the selected chat after restart', async () => {
-  vi.mocked(api.search).mockResolvedValue([])
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
   const store = useChatStore()
   await store.ask('default', '第一段对话', 'search')
   const first = store.current('default')!.id
@@ -102,7 +182,11 @@ it('keeps separate chats, persists them, and restores the selected chat after re
 })
 
 it('deletes and restores a conversation without changing its references or messages', async () => {
-  vi.mocked(api.search).mockResolvedValue([])
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
   const store = useChatStore()
   const session = store.create('default')
   store.setReferences('default', [{ id: 'a'.repeat(64), filename: 'plan.md' }])
@@ -152,7 +236,11 @@ it('bounds history and omits local search results from cloud context', () => {
 })
 
 it('surfaces storage errors while allowing an in-memory chat to continue', async () => {
-  vi.mocked(api.search).mockResolvedValue([])
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
   vi.stubGlobal('localStorage', {
     getItem: () => null,
     setItem: () => {
@@ -197,15 +285,15 @@ it('merges restored conversations and persists them without replacing originals'
   setActivePinia(createPinia())
   expect(useChatStore().current('restored-library')!.id).toBe('restored-chat')
 })
-it('keeps existing conversations intact when restored chats exceed storage quota', () => {
+it('keeps existing conversations intact when restored chats exceed storage quota', async () => {
   const store = useChatStore()
   const original = store.create('default')
   vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
     throw new Error('quota')
   })
-  expect(() =>
+  await expect(
     store.importConversations([{ ...original, id: 'restored-chat', library: 'restored-library' }]),
-  ).toThrow('quota')
+  ).rejects.toThrow('quota')
   expect(store.sessions).toHaveLength(1)
   expect(store.current('default')!.id).toBe(original.id)
   expect(store.current('restored-library')).toBeUndefined()
@@ -263,4 +351,145 @@ it('preserves the previous answer when regeneration fails', async () => {
   expect(answer.content).toBe('Keep this answer')
   expect(answer.notice).toContain('保留上次回答')
   expect(answer.error).toBe('Transport failure')
+})
+
+it('preserves original user whitespace and streams saved answer checkpoints', async () => {
+  const question = '  请整理资料\n\n保留格式  '
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'delta', delta: '第一段\n\n' }
+    const saved = JSON.parse(localStorage.getItem('edge-assistant.chats.v1')!)
+    expect(saved.sessions[0].messages[1].content).toBe('第一段\n\n')
+    yield { type: 'delta', delta: '第二段  ' }
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', question, 'chat')
+  expect(store.current('default')!.messages[0]!.content).toBe(question)
+  expect(store.current('default')!.messages[1]!.content).toBe('第一段\n\n第二段  ')
+  expect(store.current('default')!.messages[1]!.error).toBeUndefined()
+})
+
+it('replaces generic legacy chat titles with a concise topic summary', async () => {
+  const store = useChatStore()
+  const chat = store.create('default')
+  chat.title = '新对话'
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
+  await store.ask('default', '帮我查询出威海荣成的 fpt 地址和用户名和密码是多少', 'search')
+  expect(store.current('default')!.title).toBe('威海荣成 · FTP 连接信息')
+})
+
+it('migrates legacy records once and restores the database after clearing browser cache', async () => {
+  vi.mocked(api.localQuery).mockResolvedValue({
+    sources: [],
+    content: '暂时没有找到相关资料。',
+    notice: '本次仅在本机检索，不调用 DeepSeek。',
+  })
+  const legacy = useChatStore()
+  await legacy.ask('default', '请帮我整理项目架构', 'search')
+  let remote = {
+    version: 1 as const,
+    initialized: false,
+    revision: 0,
+    sessions: [] as typeof legacy.sessions,
+    active: {},
+  }
+  vi.mocked(api.loadChatState).mockImplementation(async () => JSON.parse(JSON.stringify(remote)))
+  vi.mocked(api.saveChatState).mockImplementation(async (value, revision) => {
+    expect(revision).toBe(remote.revision)
+    remote = { ...JSON.parse(JSON.stringify(value)), initialized: true, revision: revision + 1 }
+    return { revision: remote.revision }
+  })
+  await legacy.initialize()
+  expect(remote.sessions[0]!.title).toBe('项目架构')
+  localStorage.removeItem('edge-assistant.chats.v1')
+  setActivePinia(createPinia())
+  const restored = useChatStore()
+  await restored.initialize()
+  expect(restored.current('default')!.messages).toEqual(legacy.current('default')!.messages)
+  for (const chat of [...restored.sessions]) restored.remove(chat.id)
+  await restored.flush()
+  setActivePinia(createPinia())
+  const empty = useChatStore()
+  await empty.initialize()
+  expect(empty.sessions).toEqual([])
+  expect(empty.create('default')).toBeDefined()
+  await empty.flush()
+})
+
+it('saves full streaming content despite browser quota and retains answer versions', async () => {
+  vi.mocked(api.loadChatState).mockResolvedValue({
+    version: 1,
+    initialized: false,
+    revision: 0,
+    sessions: [],
+    active: {},
+  })
+  let revision = 0
+  vi.mocked(api.saveChatState).mockImplementation(async () => ({ revision: ++revision }))
+  const store = useChatStore()
+  await store.initialize()
+  vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+    throw new Error('quota')
+  })
+  const content = '段落\n'.repeat(100000)
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'delta', delta: content }
+    yield { type: 'done' }
+  })
+  await store.ask('default', '请总结方案', 'chat')
+  expect(store.savingError).toBe('')
+  const answer = store.current('default')!.messages[1]!
+  await store.retry('default', answer.id)
+  expect(answer.versions![0]!.content).toBe(content)
+  expect(vi.mocked(api.saveChatState).mock.calls.at(-1)![0].sessions[0]!.messages[1]!.content).toBe(
+    content,
+  )
+})
+
+it('does not overwrite corrupt legacy records with an empty state', async () => {
+  localStorage.setItem('edge-assistant.chats.v1', '{corrupt')
+  vi.mocked(api.loadChatState).mockResolvedValue({
+    version: 1,
+    initialized: false,
+    revision: 0,
+    sessions: [],
+    active: {},
+  })
+  const store = useChatStore()
+  await store.initialize()
+  store.create('default')
+  expect(localStorage.getItem('edge-assistant.chats.v1')).toBe('{corrupt')
+  expect(api.saveChatState).not.toHaveBeenCalled()
+  expect(store.savingError).toContain('读取失败')
+})
+
+it('keeps manual titles and interrupted stream content when reopening database records', async () => {
+  const store = useChatStore()
+  const session = store.create('default')
+  store.rename(session.id, '手动标题')
+  session.messages.push({
+    id: 'partial',
+    role: 'assistant',
+    content: '已收到的文字\n ',
+    sources: [],
+    status: 'streaming',
+  })
+  vi.mocked(api.loadChatState).mockResolvedValue({
+    version: 1,
+    initialized: true,
+    revision: 5,
+    sessions: [JSON.parse(JSON.stringify(session))],
+    active: { default: session.id },
+    lastLibrary: 'default',
+  })
+  vi.mocked(api.saveChatState).mockResolvedValue({ revision: 6 })
+  await store.initialize()
+  expect(store.current('default')!.title).toBe('手动标题')
+  expect(store.current('default')!.messages[0]!.content).toBe('已收到的文字\n ')
+  expect(store.current('default')!.messages[0]!.status).toBe('stopped')
+  expect(store.lastLibrary).toBe('default')
 })

@@ -82,7 +82,7 @@ function restore() {
     let localFailure = false
     try {
       if (restoreChats.value)
-        chat.importConversations(restoredChats(result.frontend.chats, result.mapping))
+        await chat.importConversations(restoredChats(result.frontend.chats, result.mapping))
       if (restorePreferences.value && result.frontend.preferences)
         preferences.values = validatePreferences(result.frontend.preferences)
     } catch {

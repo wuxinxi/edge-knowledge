@@ -26,6 +26,14 @@ export interface Document {
   duration?: number
   assets?: number
 }
+export interface LocalQueryResult {
+  kind?: 'retrieval' | 'catalog' | 'clarification'
+  query?: { plan?: import('./query').QuerySpec; planner?: 'local' | 'local_model' | 'deepseek' }
+  sources: Source[]
+  content: string
+  notice: string
+}
+
 export interface Source {
   document_id: string
   filename: string
@@ -45,8 +53,13 @@ export interface HistoryMessage {
 export interface QueryOptions {
   documentIds?: string[]
   history?: HistoryMessage[]
+  queryPlan?: import('./query').QuerySpec
 }
 export interface Settings {
+  generation_provider?: 'local' | 'deepseek'
+  local_model_path?: string
+  local_server_path?: string
+  local_context_size?: number
   base_url: string
   model: string
   stream: boolean
@@ -70,12 +83,21 @@ export interface Capabilities {
     context_limit?: number
     dimensions?: number[]
   }
-  generator: { model: string; images: boolean }
-  ocr: { available: boolean }
+  generator: { model: string; images: boolean; provider?: 'local' | 'deepseek' }
+  local_model?: {
+    configured: boolean
+    model_available: boolean
+    runtime_available: boolean
+    loaded: boolean
+    model: string
+    context_size: number
+  } | null
+  ocr: { available: boolean; engine?: string }
   image_qa_mode: 'local_ocr' | 'cloud_vision'
   max_cloud_images: number
 }
 export interface OCRExtraction {
+  engine?: string
   status: 'ready' | 'empty' | 'unavailable' | 'error'
   text: string
   message: string
@@ -93,6 +115,12 @@ export type SettingsPatch = Partial<
   >
 > & { api_key?: string }
 export type ChatEvent =
+  | {
+      type: 'execution'
+      location: 'local' | 'cloud'
+      planner?: 'local' | 'local_model' | 'deepseek'
+      generator?: 'local' | 'deepseek'
+    }
   | { type: 'sources'; sources: Source[] }
   | { type: 'delta'; delta: string }
   | { type: 'done' }
@@ -123,6 +151,8 @@ export interface SemanticOptions {
   task?: 'search' | 'document' | 'code' | 'qa' | 'fact'
   dimension?: number
   top_k?: number
+  match_mode?: 'auto' | 'image_text' | 'broad'
+  min_score?: number
   document_ids?: string[]
   kinds?: MediaKind[]
 }
@@ -131,6 +161,14 @@ export interface SemanticResult {
   budget: EmbeddingBudget
   dimension: number
   aggregation: string
+  relevance?: {
+    mode: 'auto' | 'image_text' | 'broad'
+    strategy: 'image_text' | 'semantic' | 'broad'
+    min_score: number
+    candidate_count: number
+    matched_count: number
+    filtered_count: number
+  }
 }
 export interface OrganizationResult {
   task: string

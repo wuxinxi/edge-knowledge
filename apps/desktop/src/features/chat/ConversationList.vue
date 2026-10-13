@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { MessageSquare, MoreHorizontal, Plus, Pencil, Trash2, X } from '@lucide/vue'
+import { MessageSquare, MoreHorizontal, Pencil, Trash2, X } from '@lucide/vue'
 import { useAppStore } from '../../app/store'
 import { useI18n } from '../../shared/i18n'
 import { useChatStore } from './store'
@@ -9,9 +9,7 @@ const app = useAppStore(),
   chat = useChatStore(),
   router = useRouter()
 const route = useRoute()
-const idleHome = computed(
-  () => route.path === '/' && !chat.current(app.activeLibrary)?.messages.length,
-)
+const emit = defineEmits<{ navigate: [] }>()
 const { t } = useI18n()
 const search = ref('')
 const items = computed(() =>
@@ -25,12 +23,9 @@ const editing = ref(''),
 const renameDialog = ref<HTMLDialogElement>(),
   deleteDialog = ref<HTMLDialogElement>(),
   titleInput = ref<HTMLInputElement>()
-function newChat() {
-  chat.create(app.activeLibrary)
-  void router.push('/')
-}
 function select(id: string) {
   chat.select(app.activeLibrary, id)
+  emit('navigate')
   void router.push('/')
 }
 function closeMenu(id: string) {
@@ -61,10 +56,7 @@ function confirmDelete() {
 <template>
   <section class="conversation-navigation" :aria-label="t('最近对话')">
     <div class="conversation-heading">
-      <span>{{ t('最近对话') }}</span
-      ><button class="icon-button" :disabled="idleHome" :aria-label="t('新对话')" @click="newChat">
-        <Plus :size="17" />
-      </button>
+      <span>{{ t('最近对话') }}</span>
     </div>
     <input
       class="conversation-search"

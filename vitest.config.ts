@@ -1,3 +1,4 @@
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
-export default defineConfig({ test: { include: ['apps/desktop/**/*.test.ts'] } })
+export default defineConfig({ plugins: [vue()], test: { include: ['apps/desktop/**/*.test.ts'] } })

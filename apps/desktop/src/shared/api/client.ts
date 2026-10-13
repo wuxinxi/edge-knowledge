@@ -17,8 +17,10 @@ import type {
   Settings,
   SettingsPatch,
   Source,
+  LocalQueryResult,
 } from '../types/api'
 import { readSSE } from './sse'
+import type { ChatSnapshot, SavedChatState } from '../types/conversations'
 import type { FolderIndexedFile } from '../types/access'
 
 let connection: Promise<BackendSession> | undefined
@@ -56,6 +58,12 @@ function desktopFolders() {
   return window.edgeDesktop.folders
 }
 export const api = {
+  loadChatState: () => json<SavedChatState>('/api/chat-state'),
+  saveChatState: (state: ChatSnapshot, revision: number) =>
+    json<{ revision: number }>('/api/chat-state', {
+      method: 'POST',
+      ...payload({ ...state, revision }),
+    }),
   archiveDocuments: (library: string, ids: string[], all = false) =>
     json<{ archived: number; document_ids: string[]; folder_sync_paused: boolean }>(
       `/api/libraries/${encodeURIComponent(library)}/documents/archive-batch`,
@@ -205,6 +213,24 @@ export const api = {
       ...payload({ library_id: library, question, document_ids: documentIds }),
       signal,
     }),
+  localQuery: (
+    library: string,
+    question: string,
+    signal: AbortSignal,
+    documentIds: string[] = [],
+    queryPlan?: import('../types/query').QuerySpec,
+  ) =>
+    json<LocalQueryResult>('/api/local-query', {
+      method: 'POST',
+      ...payload({
+        library_id: library,
+        question,
+        document_ids: documentIds,
+        query_plan: queryPlan,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+      signal,
+    }),
   async *query(
     library: string,
     question: string,
@@ -219,6 +245,9 @@ export const api = {
         question,
         allow_image_upload: allowImageUpload,
         document_ids: options.documentIds ?? [],
+        query_plan: options.queryPlan,
+        allow_planning: true,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         history: options.history ?? [],
       }),
       signal,

@@ -2,31 +2,19 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../../shared/api/client'
 import type { Source, HistoryMessage } from '../../shared/types/api'
+import type { QuerySpec } from '../../shared/types/query'
 import { useI18n } from '../../shared/i18n'
 
-export interface Reference {
-  id: string
-  filename: string
-}
-export interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  sources: Source[]
-  references?: Reference[]
-  mode?: 'search' | 'chat'
-  error?: string
-  notice?: string
-}
-export interface Conversation {
-  id: string
-  library: string
-  title: string
-  createdAt: string
-  updatedAt: string
-  messages: Message[]
-  references: Reference[]
-}
+import type {
+  Conversation,
+  Message,
+  Reference,
+  ChatSnapshot,
+} from '../../shared/types/conversations'
+export type { Conversation, Message, Reference } from '../../shared/types/conversations'
+import { useTaskStore } from '../tasks/store'
+import { updateConversationTitle } from './title'
+
 const storageKey = 'edge-assistant.chats.v1'
 export function boundedHistory(messages: Message[]): HistoryMessage[] {
   const result: HistoryMessage[] = []
@@ -44,66 +32,170 @@ export function boundedHistory(messages: Message[]): HistoryMessage[] {
   return result
 }
 export const useChatStore = defineStore('chat', () => {
+  const tasks = useTaskStore(),
+    taskId = ref(''),
+    activeAnswerId = ref('')
+  const activeTask = computed(() => tasks.get(taskId.value))
   const sessions = ref<Conversation[]>([])
   const activeByLibrary = ref<Record<string, string>>({})
   const busy = ref(false)
   const savingError = ref('')
   const deleted = ref<Conversation>()
+  const lastLibrary = ref('')
+  const loading = ref(false)
+  const durable = ref(false)
+  let revision = 0
+  let queue: Promise<void> = Promise.resolve()
+  let failedRead = false
+  let legacyCorrupt = false
   const { t, preferences } = useI18n()
   let controller: AbortController | undefined
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
+    if (saved !== null && saved?.version !== 1) throw new Error('Unsupported chat snapshot')
     if (saved?.version === 1 && Array.isArray(saved.sessions)) {
-      sessions.value = saved.sessions.filter(
-        (item: Conversation) =>
-          typeof item?.id === 'string' &&
-          typeof item.library === 'string' &&
-          typeof item.title === 'string' &&
-          typeof item.updatedAt === 'string' &&
-          typeof item.createdAt === 'string' &&
-          Array.isArray(item.messages) &&
-          Array.isArray(item.references) &&
-          item.references.every(
-            (ref) => typeof ref?.id === 'string' && typeof ref?.filename === 'string',
-          ) &&
-          item.messages.every(
-            (m) =>
-              typeof m.id === 'string' &&
-              ['user', 'assistant'].includes(m.role) &&
-              typeof m.content === 'string' &&
-              Array.isArray(m.sources),
-          ),
+      if (
+        !saved.sessions.every(
+          (item: Conversation) =>
+            typeof item?.id === 'string' &&
+            typeof item.library === 'string' &&
+            typeof item.title === 'string' &&
+            typeof item.updatedAt === 'string' &&
+            typeof item.createdAt === 'string' &&
+            Array.isArray(item.messages) &&
+            Array.isArray(item.references) &&
+            item.references.every(
+              (ref) => typeof ref?.id === 'string' && typeof ref?.filename === 'string',
+            ) &&
+            item.messages.every(
+              (m) =>
+                typeof m.id === 'string' &&
+                ['user', 'assistant'].includes(m.role) &&
+                typeof m.content === 'string' &&
+                Array.isArray(m.sources),
+            ),
+        )
       )
+        throw new Error('Invalid chat storage')
+      sessions.value = saved.sessions
+      lastLibrary.value = saved.lastLibrary ?? ''
       activeByLibrary.value = saved.active && typeof saved.active === 'object' ? saved.active : {}
+      for (const [library, id] of Object.entries(activeByLibrary.value)) {
+        if (!sessions.value.some((item) => item.library === library && item.id === id))
+          delete activeByLibrary.value[library]
+      }
       for (const session of sessions.value) {
         const last = session.messages.at(-1)
-        if (last?.role === 'assistant' && !last.content && !last.error) last.error = t('已停止。')
+        updateConversationTitle(session)
+        if (last?.role === 'assistant' && last.status === 'streaming') {
+          last.status = 'stopped'
+          last.error = t('已停止。')
+        }
       }
     }
   } catch {
-    /* Storage is optional in tests; unavailable storage is surfaced when writing. */
+    failedRead = true
+    legacyCorrupt = true
+    savingError.value = t('会话记录读取失败，原始记录已保留，请导出或检查存储。')
   }
-  function persist() {
+  function snapshot(): ChatSnapshot {
+    return JSON.parse(
+      JSON.stringify({
+        version: 1,
+        sessions: sessions.value,
+        active: activeByLibrary.value,
+        lastLibrary: lastLibrary.value,
+      }),
+    )
+  }
+  function cache(value: ChatSnapshot) {
+    localStorage.setItem(storageKey, JSON.stringify(value))
+  }
+  function persist(): Promise<void> {
+    const value = snapshot()
+    if (!durable.value) {
+      if (failedRead) return Promise.resolve()
+      try {
+        cache(value)
+        savingError.value = ''
+      } catch {
+        savingError.value = t('对话保存失败，请导出备份后检查设备存储。')
+      }
+      return Promise.resolve()
+    }
+    // Capture immutable snapshots and serialize writes so delayed responses cannot roll state back.
+    queue = queue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const result = await api.saveChatState(value, revision)
+          revision = result.revision
+          savingError.value = ''
+          // Cache is for migration/offline recovery; SQLite is authoritative after initialization.
+          try {
+            cache(value)
+          } catch {
+            /* Full database snapshot remains durable. */
+          }
+        } catch {
+          savingError.value = t('对话保存失败，请导出备份后检查设备存储。')
+          throw new Error(savingError.value)
+        }
+      })
+    void queue.catch(() => {})
+    return queue
+  }
+  async function initialize() {
+    if (loading.value || durable.value) return
+    loading.value = true
     try {
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({ version: 1, sessions: sessions.value, active: activeByLibrary.value }),
-      )
-      savingError.value = ''
+      const saved = await api.loadChatState()
+      revision = saved.revision
+      if (saved.initialized) {
+        failedRead = false
+        sessions.value = saved.sessions
+        lastLibrary.value = saved.lastLibrary ?? ''
+        activeByLibrary.value = saved.active
+      } else if (legacyCorrupt) {
+        throw new Error('Legacy snapshot needs recovery')
+      }
+      failedRead = false
+      for (const session of sessions.value) {
+        updateConversationTitle(session)
+        const last = session.messages.at(-1)
+        if (last?.status === 'streaming') {
+          last.status = 'stopped'
+          last.error = t('已停止。')
+        }
+      }
+      durable.value = true
+      await persist()
     } catch {
-      savingError.value = t('对话保存失败，请导出备份后检查设备存储。')
+      failedRead = true
+      savingError.value = t('会话记录读取失败，原始记录已保留，请导出或检查存储。')
+    } finally {
+      loading.value = false
     }
   }
-  function importConversations(items: Conversation[]) {
+  async function flush() {
+    await queue
+  }
+  async function importConversations(items: Conversation[]) {
     if (busy.value) throw new Error(t('请等待当前对话完成后再恢复备份。'))
+    const previous = snapshot()
     const merged = [...items, ...sessions.value]
     const active = { ...activeByLibrary.value }
     for (const item of items) if (!active[item.library]) active[item.library] = item.id
-    // Commit storage before changing in-memory state; quota failures keep existing chats.
-    localStorage.setItem(storageKey, JSON.stringify({ version: 1, sessions: merged, active }))
+    if (!durable.value) cache({ version: 1, sessions: merged, active })
     sessions.value = merged
     activeByLibrary.value = active
-    savingError.value = ''
+    try {
+      await persist()
+    } catch (error) {
+      sessions.value = previous.sessions
+      activeByLibrary.value = previous.active
+      throw error
+    }
   }
   function list(library: string) {
     return sessions.value
@@ -123,7 +215,12 @@ export const useChatStore = defineStore('chat', () => {
       ]),
     ),
   )
+  function rememberLibrary(library: string) {
+    lastLibrary.value = library
+    if (!loading.value) void persist()
+  }
   function create(library: string) {
+    lastLibrary.value = library
     const active = current(library)
     if (active && !active.messages.length) return active
     stop()
@@ -139,6 +236,7 @@ export const useChatStore = defineStore('chat', () => {
       id: crypto.randomUUID(),
       library,
       title: '',
+      titleSource: 'auto',
       createdAt: now,
       updatedAt: now,
       messages: [],
@@ -150,6 +248,7 @@ export const useChatStore = defineStore('chat', () => {
     return current(library)!
   }
   function select(library: string, id: string) {
+    lastLibrary.value = library
     if (!sessions.value.some((item) => item.id === id && item.library === library)) return
     stop()
     activeByLibrary.value[library] = id
@@ -159,6 +258,7 @@ export const useChatStore = defineStore('chat', () => {
     const session = sessions.value.find((item) => item.id === id)
     if (session && title.trim()) {
       session.title = title.trim().slice(0, 80)
+      session.titleSource = 'manual'
       persist()
     }
   }
@@ -191,27 +291,45 @@ export const useChatStore = defineStore('chat', () => {
   async function ask(
     library: string,
     question: string,
-    mode: 'search' | 'chat' = 'chat',
+    mode: 'search' | 'chat' = 'search',
     allowImageUpload = false,
+    queryPlan?: QuerySpec,
   ) {
-    if (busy.value || !question.trim()) return
+    if (loading.value || busy.value || !question.trim()) return
     const session = current(library) ?? create(library)
     const messages = session.messages
     const history = boundedHistory(messages)
     const references = [...session.references]
-    if (!session.title) session.title = question.trim().slice(0, 40)
     session.updatedAt = new Date().toISOString()
     messages.push({
       id: crypto.randomUUID(),
       role: 'user',
-      content: question.trim(),
+      content: question,
       sources: [],
       references,
       mode,
+      ...(queryPlan ? { queryPlan: JSON.parse(JSON.stringify(queryPlan)) } : {}),
     })
-    messages.push({ id: crypto.randomUUID(), role: 'assistant', content: '', sources: [], mode })
+    updateConversationTitle(session)
+    messages.push({
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      sources: [],
+      mode,
+      status: 'streaming',
+    })
     const answer = messages[messages.length - 1]!
-    await runAnswer(library, question, mode, references, history, answer, allowImageUpload)
+    await runAnswer(
+      library,
+      question,
+      mode,
+      references,
+      history,
+      answer,
+      allowImageUpload,
+      queryPlan,
+    )
   }
   async function runAnswer(
     library: string,
@@ -221,23 +339,41 @@ export const useChatStore = defineStore('chat', () => {
     history: HistoryMessage[],
     answer: Message,
     allowImageUpload: boolean,
+    queryPlan?: QuerySpec,
   ) {
     const pending = (controller = new AbortController())
     busy.value = true
-    persist()
+    activeAnswerId.value = answer.id
+    const feedback = (taskId.value = tasks.begin(
+      mode === 'search' ? '查找资料' : '资料问答',
+      library,
+      { stop, stopLabel: '停止回答' },
+    ))
+    tasks.update(feedback, { phase: '查找资料' })
     try {
+      await persist()
+      pending.signal.throwIfAborted()
       if (mode === 'search') {
-        answer.sources = await api.search(
+        const args = [
           library,
           question.trim(),
           pending.signal,
           references.map((item) => item.id),
-        )
-        answer.content = answer.sources.length
-          ? preferences.values.language === 'en-US'
-            ? `Found ${answer.sources.length} relevant excerpts. Open the sources below.`
-            : `找到 ${answer.sources.length} 个相关片段。展开下方来源查看原文。`
-          : t('暂时没有找到相关资料。请先导入文档，或换一种描述。')
+        ] as const
+        const result = queryPlan
+          ? await api.localQuery(...args, queryPlan)
+          : await api.localQuery(...args)
+        answer.sources = result.sources
+        answer.content =
+          result.kind === 'retrieval' &&
+          result.sources.length &&
+          preferences.values.language === 'en-US'
+            ? `Found ${new Set(result.sources.map((source) => source.document_id)).size} sources. Results are shown below.`
+            : t(result.content)
+        answer.notice = t(result.notice)
+        answer.planner = result.query?.planner
+        answer.status = 'complete'
+        await persist()
         return
       }
       for await (const event of api.query(
@@ -245,16 +381,33 @@ export const useChatStore = defineStore('chat', () => {
         question.trim(),
         pending.signal,
         allowImageUpload,
-        { documentIds: references.map((item) => item.id), history },
+        {
+          documentIds: references.map((item) => item.id),
+          history,
+          ...(queryPlan ? { queryPlan } : {}),
+        },
       )) {
-        if (event.type === 'sources') answer.sources = event.sources
+        if (event.type === 'sources') {
+          answer.sources = event.sources
+          tasks.update(feedback, { phase: '生成回答' })
+        }
+        if (event.type === 'execution') {
+          answer.planner = event.planner
+          answer.generator = event.generator
+          answer.mode = event.generator ? 'chat' : event.location === 'local' ? 'search' : 'chat'
+          tasks.update(feedback, { phase: event.generator ? '生成回答' : '查找资料' })
+        }
         if (event.type === 'delta') answer.content += event.delta
         if (event.type === 'notice') answer.notice = event.message
         if (event.type === 'error') {
           answer.error = event.message
-          break
+          answer.status = 'error'
         }
+        if (event.type === 'done') answer.status = 'complete'
+        await persist()
+        if (event.type === 'error') break
       }
+      if (answer.status === 'streaming') answer.status = 'stopped'
     } catch (cause) {
       answer.error =
         cause instanceof Error && cause.name === 'AbortError'
@@ -262,10 +415,19 @@ export const useChatStore = defineStore('chat', () => {
           : cause instanceof Error
             ? cause.message
             : t('回答失败，请重试。')
+      answer.status = pending.signal.aborted ? 'stopped' : 'error'
     } finally {
+      tasks.finish(
+        feedback,
+        answer.status === 'stopped' ? 'stopped' : answer.error ? 'error' : 'success',
+        answer.status === 'stopped'
+          ? t('已停止接收回答，已收到的内容已保留。后台请求可能仍在结束。')
+          : answer.error || '',
+      )
+      tasks.setActions(feedback, {})
       busy.value = false
-      controller = undefined
-      persist()
+      if (controller === pending) controller = undefined
+      await persist().catch(() => {})
     }
   }
   async function retry(library: string, answerId: string, allowImageUpload = false) {
@@ -282,10 +444,23 @@ export const useChatStore = defineStore('chat', () => {
     )
       return
     const original: Message = JSON.parse(JSON.stringify(answer))
+    answer.versions ??= []
+    answer.versions.push({
+      content: original.content,
+      sources: original.sources,
+      error: original.error,
+      notice: original.notice,
+      savedAt: new Date().toISOString(),
+      planner: original.planner,
+      generator: original.generator,
+    })
+    answer.status = 'streaming'
     answer.content = ''
     answer.sources = []
     answer.error = undefined
     answer.notice = undefined
+    answer.planner = undefined
+    answer.generator = undefined
     session.updatedAt = new Date().toISOString()
     await runAnswer(
       library,
@@ -295,12 +470,25 @@ export const useChatStore = defineStore('chat', () => {
       boundedHistory(session.messages.slice(0, -2)),
       answer,
       allowImageUpload,
+      question.queryPlan,
     )
     if (answer.error && original.content) {
       const error = answer.error
-      Object.assign(answer, original, { error })
+      if (answer.content && answer.content !== original.content) {
+        answer.versions?.push({
+          content: answer.content,
+          sources: answer.sources,
+          error,
+          notice: answer.notice,
+          savedAt: new Date().toISOString(),
+          planner: original.planner,
+          generator: original.generator,
+        })
+      }
+      const versions = answer.versions
+      Object.assign(answer, original, { error, versions, status: 'error' })
       answer.notice = t('重新生成未完成，已保留上次回答。')
-      persist()
+      await persist().catch(() => {})
     }
   }
   function stop() {
@@ -311,10 +499,18 @@ export const useChatStore = defineStore('chat', () => {
   }
   return {
     sessions,
+    initialize,
+    flush,
+    loading,
+    lastLibrary,
+    rememberLibrary,
+    durable,
     importConversations,
     conversations,
     activeByLibrary,
     busy,
+    activeTask,
+    activeAnswerId,
     savingError,
     deleted,
     list,
