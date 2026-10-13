@@ -2,6 +2,10 @@ import { usePreferences } from '../preferences/store'
 
 // Product copy is translated here; source text and model answers retain their original language.
 const english: Record<string, string> = {
+  展开来源: 'Show sources',
+  处理说明: 'Processing details',
+  展开其余片段: 'Show more excerpts',
+  收起其余片段: 'Hide extra excerpts',
   检查重复: 'Check duplicates',
   对比重复笔记: 'Compare duplicate notes',
   检查当前资料范围的重复笔记: 'Check duplicate notes in the current scope',

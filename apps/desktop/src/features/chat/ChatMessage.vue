@@ -116,7 +116,10 @@ async function copy() {
         <p v-if="message.status === 'stopped' && !task" class="answer-evidence-note">
           {{ message.error || t('已停止。') }}
         </p>
-        <p v-if="message.notice" class="answer-evidence-note">{{ message.notice }}</p>
+        <details v-if="message.notice" class="answer-processing-note">
+          <summary>{{ t('处理说明') }}</summary>
+          <p>{{ message.notice }}</p>
+        </details>
         <DuplicateMatches
           v-if="message.comparisons?.length"
           :pairs="message.comparisons"

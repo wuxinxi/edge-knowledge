@@ -91,7 +91,7 @@ it('shows the found image in chat without opening a source dialog and keeps OCR 
   await nextTick()
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rawOCR)
 })
-it('shows images alongside AI interpretations too', async () => {
+it('keeps AI answer sources compact and opens the original image only on demand', async () => {
   await mount({
     id: 'result',
     role: 'assistant',
@@ -99,8 +99,22 @@ it('shows images alongside AI interpretations too', async () => {
     content: '解读',
     sources: [imageSource],
   })
-  expect(root.querySelector('.source-content-image img')).not.toBeNull()
+  expect(root.querySelector('.source-content-image img')).toBeNull()
+  expect(api.imageAsset).not.toHaveBeenCalled()
   expect(root.textContent).toContain('DeepSeek 解读')
+  const toggle = root.querySelector<HTMLButtonElement>('.source-disclosure')!
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  toggle.click()
+  await nextTick()
+  expect(root.querySelectorAll('.answer-source-card')).toHaveLength(1)
+  expect(api.imageAsset).not.toHaveBeenCalled()
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  root.querySelector<HTMLButtonElement>('.answer-source-card')!.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(root.querySelector('.source-preview-body img')).not.toBeNull()
 })
 
 it('discloses AI planning for a locally calculated result without claiming the entire request was local', async () => {
@@ -132,6 +146,9 @@ it('renders all matching document excerpts as safe Markdown while retaining full
     content: '找到 1 份相关资料',
     sources: [source, { ...source, index: 1, text: '后续步骤' }],
   })
+  expect(root.querySelectorAll('.source-document-excerpt')).toHaveLength(1)
+  root.querySelector<HTMLButtonElement>('.source-snippet-toggle')!.click()
+  await nextTick()
   expect(root.querySelectorAll('.source-document-excerpt')).toHaveLength(2)
   expect(root.querySelector('.source-document-excerpt h1')?.textContent).toBe('操作清单')
   expect(root.querySelectorAll('.source-document-excerpt li')).toHaveLength(2)
@@ -211,4 +228,26 @@ it('shows duplicate notes side by side with safe excerpts and distinguishes exac
   expect(root.textContent).toContain('archive/部署/index.md')
   expect(root.querySelector('script')).toBeNull()
   expect(root.querySelector('dialog[open]')).toBeNull()
+})
+
+it('limits inline results to four files and reveals the remaining files without losing evidence', async () => {
+  await mount({
+    id: 'many',
+    role: 'assistant',
+    mode: 'search',
+    content: '找到图片',
+    sources: Array.from({ length: 7 }, (_, i) => ({
+      ...imageSource,
+      document_id: `image-${i}`,
+      filename: `chart-${i}.png`,
+    })),
+    notice: '完整处理说明',
+  })
+  expect(root.querySelectorAll('.answer-source-result')).toHaveLength(4)
+  expect(api.imageAsset).toHaveBeenCalledTimes(4)
+  expect(root.querySelector<HTMLDetailsElement>('.answer-processing-note')?.open).toBe(false)
+  root.querySelector<HTMLButtonElement>('.source-disclosure')!.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(root.querySelectorAll('.answer-source-result')).toHaveLength(7)
+  expect(api.imageAsset).toHaveBeenCalledTimes(7)
 })
