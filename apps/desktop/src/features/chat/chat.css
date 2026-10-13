@@ -504,3 +504,221 @@
     animation: none;
   }
 }
+
+.answer-history {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.answer-history summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.answer-history > details {
+  margin: 6px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.chat-task-feedback {
+  margin-bottom: 16px;
+}
+
+.answer-source-result {
+  min-width: 0;
+}
+.answer-source-result > .answer-source-card {
+  width: 100%;
+}
+.answer-source-grid.inline-source-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.inline-source-grid > .answer-source-result {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.inline-source-grid > .answer-source-result > .answer-source-card {
+  border: 0;
+  border-radius: 0;
+  padding: 12px 14px;
+}
+.source-content {
+  min-width: 0;
+}
+.inline-source-grid .source-content {
+  padding: 0 14px 12px;
+}
+.source-content-image > .image-preview {
+  width: 100%;
+  height: clamp(160px, calc(100dvh - 550px), 340px);
+  display: grid;
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+.source-content-caption {
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.source-original-text {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.source-original-text > summary {
+  cursor: pointer;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+.source-original-text > pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.65 var(--font-reading-family);
+  padding: 12px;
+  background: var(--surface-soft);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+.source-document-excerpt .markdown-answer {
+  font-size: var(--text-body);
+  line-height: 1.75;
+}
+.source-document-excerpt .markdown-answer > :first-child {
+  margin-top: 0;
+}
+.source-document-excerpt .markdown-answer > :last-child {
+  margin-bottom: 0;
+}
+.source-metadata {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.source-metadata > div {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 10px;
+}
+.source-metadata dt {
+  color: var(--muted);
+  font-weight: 400;
+}
+.source-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+}
+.query-builder-trigger {
+  margin: 4px 0 0 auto;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+}
+.action-dialog.query-builder-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 24px;
+  overflow: auto;
+}
+.query-builder-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.query-builder-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.query-builder-heading p,
+.query-builder-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.query-builder-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0;
+}
+.query-builder-row label {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 140px;
+  font-size: 12px;
+}
+.query-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.query-filter-row select,
+.query-filter-row input {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.query-builder-filters {
+  border-block: 1px solid var(--line);
+  padding: 16px 0;
+}
+.query-builder-options {
+  margin: 16px 0;
+  font-size: 12px;
+}
+.query-builder-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.query-builder-note svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.query-builder-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+.query-builder-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.composer-controls .mode-selector {
+  margin-bottom: 0;
+}
+.composer-controls .query-builder-trigger {
+  margin: 0;
+  white-space: nowrap;
+}
+.query-builder-dialog input {
+  margin-top: 0;
+}
+
+.query-builder-filters .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}

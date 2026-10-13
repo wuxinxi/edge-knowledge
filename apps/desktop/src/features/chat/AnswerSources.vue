@@ -12,11 +12,11 @@ import {
 } from '@lucide/vue'
 import type { Source } from '../../shared/types/api'
 import { useI18n } from '../../shared/i18n'
-import ImagePreview from '../../shared/components/ImagePreview.vue'
-import MediaPreview from '../../shared/components/MediaPreview.vue'
-const props = defineProps<{ sources: Source[]; library: string }>()
+import SourceContent from './SourceContent.vue'
+const props = defineProps<{ sources: Source[]; library: string; inline?: boolean }>()
 const { t } = useI18n()
 const expanded = ref(false)
+const dialogOpen = ref(false)
 const active = ref(0)
 const dialog = ref<HTMLDialogElement>()
 const selected = computed(() => props.sources[active.value])
@@ -37,6 +37,7 @@ function icon(kind: string) {
 function open(index: number) {
   if (!props.sources[index]) return
   active.value = index
+  dialogOpen.value = true
   dialog.value?.showModal()
 }
 defineExpose({ open })
@@ -44,6 +45,7 @@ watch(
   () => props.library,
   () => {
     dialog.value?.close()
+    dialogOpen.value = false
     expanded.value = false
   },
 )
@@ -57,26 +59,39 @@ watch(
         {{ t(expanded ? '收起' : '查看全部') }}
       </button>
     </div>
-    <div class="answer-source-grid">
-      <button
-        v-for="group in visible"
-        :key="group.indices[0]"
-        class="answer-source-card"
-        @click="open(group.indices[0]!)"
-      >
-        <span class="answer-source-icon"><component :is="icon(group.kind)" :size="16" /></span
-        ><span class="answer-source-info"
-          ><strong :title="group.filename">{{ group.filename }}</strong
-          ><small
-            >{{ group.indices.map((i) => '[' + (i + 1) + ']').join(' ') }} ·
-            {{ group.indices.length }} {{ t('个片段') }}</small
-          ></span
-        ><ChevronRight :size="14" />
-      </button>
+    <div
+      class="answer-source-grid"
+      :class="{ 'inline-source-grid': inline || visible.some((group) => group.kind === 'image') }"
+    >
+      <article v-for="group in visible" :key="group.indices[0]" class="answer-source-result">
+        <button class="answer-source-card" @click="open(group.indices[0]!)">
+          <span class="answer-source-icon"><component :is="icon(group.kind)" :size="16" /></span
+          ><span class="answer-source-info"
+            ><strong :title="group.filename">{{ group.filename }}</strong
+            ><small
+              >{{ group.indices.map((i) => '[' + (i + 1) + ']').join(' ') }} ·
+              {{ group.indices.length }} {{ t('个片段') }}</small
+            ></span
+          ><ChevronRight :size="14" />
+        </button>
+        <template v-if="inline || group.kind === 'image'">
+          <SourceContent
+            v-for="index in inline && group.kind !== 'image' ? group.indices : [group.indices[0]!]"
+            :key="index"
+            :source="sources[index]!"
+            :library="library"
+          />
+        </template>
+      </article>
     </div>
   </section>
-  <dialog ref="dialog" class="action-dialog source-preview-dialog" :aria-label="t('来源片段')">
-    <template v-if="selected"
+  <dialog
+    ref="dialog"
+    class="action-dialog source-preview-dialog"
+    :aria-label="t('来源片段')"
+    @close="dialogOpen = false"
+  >
+    <template v-if="selected && dialogOpen"
       ><div class="source-preview-heading">
         <span class="answer-source-icon"
           ><component :is="icon(selected.kind ?? 'document')" :size="18"
@@ -105,20 +120,11 @@ watch(
         </button>
       </nav>
       <div class="source-preview-body">
-        <ImagePreview
-          v-if="selected.kind === 'image'"
+        <SourceContent
+          :key="`${selected.document_id}:${selected.index}`"
+          :source="selected"
           :library="library"
-          :document="selected.document_id"
-          :filename="selected.filename"
-        /><MediaPreview
-          v-if="['audio', 'video', 'bundle'].includes(selected.kind ?? '')"
-          :library="library"
-          :document="selected.document_id"
-          :start="selected.start"
         />
-        <p class="source-preview-text">
-          {{ selected.text || t('媒体语义检索结果，请查看本地原件。') }}
-        </p>
       </div>
       <p class="source-preview-note">
         <ExternalLink :size="12" />{{ t('原文证据来自本次检索，编号与回答引用对应。') }}

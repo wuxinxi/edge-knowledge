@@ -5,9 +5,12 @@ import type { Message } from './store'
 import { useI18n } from '../../shared/i18n'
 import MarkdownAnswer from './MarkdownAnswer.vue'
 import AnswerSources from './AnswerSources.vue'
+import type { TaskRecord } from '../tasks/store'
+import TaskFeedback from '../tasks/TaskFeedback.vue'
 const props = defineProps<{
   message: Message
   library: string
+  task?: TaskRecord
   generating: boolean
   canRetry: boolean
 }>()
@@ -25,7 +28,15 @@ watch(
 )
 async function copy() {
   try {
-    await navigator.clipboard.writeText(props.message.content)
+    const text =
+      props.message.mode === 'search' && props.message.sources.length
+        ? props.message.content +
+          '\n\n' +
+          props.message.sources
+            .map((source, i) => `[${i + 1}] ${source.filename}\n${source.text}`)
+            .join('\n\n')
+        : props.message.content
+    await navigator.clipboard.writeText(text)
     copied.value = true
     copyError.value = ''
   } catch {
@@ -53,29 +64,74 @@ async function copy() {
             :size="16" /></span
         ><strong>Edge Assistant</strong
         ><span class="assistant-mode">{{
-          t(message.mode === 'search' ? '本地检索' : '资料问答')
+          t(
+            message.planner === 'deepseek' && message.mode === 'search'
+              ? '本机结果 · AI 规划'
+              : message.planner === 'local_model' && message.mode === 'search'
+                ? '本机结果 · 本地模型规划'
+                : message.mode === 'search' || (generating && task?.phase === '查找资料')
+                  ? '本地检索'
+                  : message.generator === 'local'
+                    ? '本地模型回答'
+                    : 'DeepSeek 解读',
+          )
         }}</span
         ><span v-if="generating" class="assistant-stream-label"
           ><LoaderCircle :size="12" class="spin" />{{ t('正在回答') }}</span
         >
       </div>
       <div class="assistant-answer">
+        <TaskFeedback
+          v-if="task && (generating || task.state === 'stopped' || task.state === 'error')"
+          :task="task"
+          class="chat-task-feedback"
+        />
         <MarkdownAnswer
           v-if="message.content"
           :content="message.content"
           :source-count="message.sources.length"
           @source="sourcesPanel?.open($event)"
         />
-        <div v-else-if="generating" class="answer-thinking" role="status">
+        <div v-else-if="generating && !task" class="answer-thinking" role="status">
           <span></span><span></span><span></span>{{ t('正在查找资料并整理回答…') }}
         </div>
-        <div v-if="message.error" role="alert" class="inline-error">{{ message.error }}</div>
+        <div
+          v-if="message.error && message.status !== 'stopped' && task?.detail !== message.error"
+          role="alert"
+          class="inline-error"
+        >
+          {{ message.error }}
+        </div>
+        <p v-if="message.status === 'stopped' && !task" class="answer-evidence-note">
+          {{ message.error || t('已停止。') }}
+        </p>
         <p v-if="message.notice" class="answer-evidence-note">{{ message.notice }}</p>
-        <AnswerSources ref="sourcesPanel" :sources="message.sources" :library="library" />
+        <AnswerSources
+          ref="sourcesPanel"
+          :sources="message.sources"
+          :library="library"
+          :inline="message.mode === 'search'"
+        />
+        <details v-if="message.versions?.length" class="answer-history">
+          <summary>{{ t('历史回答') }} · {{ message.versions.length }}</summary>
+          <details v-for="(version, index) in message.versions" :key="index">
+            <summary>
+              {{ t('重试前的回答') }} {{ index + 1 }} ·
+              {{ new Date(version.savedAt).toLocaleString() }}
+            </summary>
+            <MarkdownAnswer :content="version.content" :source-count="0" />
+            <p v-if="version.error" class="inline-error">{{ version.error }}</p>
+            <AnswerSources
+              :sources="version.sources"
+              :library="library"
+              :inline="message.mode === 'search'"
+            />
+          </details>
+        </details>
         <div class="answer-actions">
           <button class="answer-action" :disabled="!message.content || generating" @click="copy">
             <Check v-if="copied" :size="13" /><Copy v-else :size="13" />{{
-              t(copied ? '已复制' : '复制回答')
+              t(copied ? '已复制' : message.mode === 'search' ? '复制结果' : '复制回答')
             }}</button
           ><button
             v-if="canRetry"
