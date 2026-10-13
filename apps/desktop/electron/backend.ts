@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
+import { backendCommand } from './backend-path'
 
 export interface BackendSession {
   baseUrl: string
@@ -20,9 +21,7 @@ export class BackendProcess {
     packaged: boolean,
     onFailure: () => void,
   ): Promise<BackendSession> {
-    const command = packaged
-      ? join(resources, 'backend/server')
-      : join(root, 'backend/.venv/bin/python')
+    const command = backendCommand(root, resources, packaged)
     if (!existsSync(command)) {
       throw new Error(
         '后端运行环境未安装。请在项目目录执行 uv sync --project backend --extra embedding --extra ocr。',

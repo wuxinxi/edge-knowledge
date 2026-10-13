@@ -21,7 +21,7 @@ from edge_knowledge.infrastructure.embedding import SentenceTransformerEmbedder
 from edge_knowledge.infrastructure.images import PillowImageProcessor
 from edge_knowledge.infrastructure.media import AVMediaDecoder
 from edge_knowledge.infrastructure.metadata import YAMLMetadataReader
-from edge_knowledge.infrastructure.ocr import AppleVisionOCR
+from edge_knowledge.infrastructure.ocr import LocalOCR
 from edge_knowledge.infrastructure.parsers import FileDocumentParser
 from edge_knowledge.infrastructure.payloads import FilePayloadStore
 from edge_knowledge.infrastructure.planner import DeepSeekQueryPlanner
@@ -48,7 +48,7 @@ def build_app(config: RuntimeConfig):
     )
     images = ImageService(
         PillowImageProcessor(),
-        AppleVisionOCR(),
+        LocalOCR(),
         FileAssetStore(directory / "assets" / repository.prefix),
     )
     payloads = FilePayloadStore(directory / "payloads" / repository.prefix)

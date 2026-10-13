@@ -1,4 +1,4 @@
-"""Run after uv sync --project backend --extra embedding --extra packaging."""
+"""Run after uv sync --project backend --extra embedding --extra ocr --extra packaging."""
 
 import subprocess
 import sys
@@ -34,14 +34,17 @@ for package in [
     "docx",
     "uvicorn",
     "PIL",
-    "objc",
-    "Foundation",
-    "Vision",
-    "Quartz",
-    "CoreML",
+    "rapidocr_onnxruntime",
+    "onnxruntime",
+    "cv2",
+    "shapely",
     "keyring",
     "av",
+    "tzdata",
 ]:
     command.extend(["--collect-all", package])
+if sys.platform == "darwin":
+    for package in ["objc", "Foundation", "Vision", "Quartz", "CoreML"]:
+        command.extend(["--collect-all", package])
 command.append(str(root / "backend/build_entry.py"))
 subprocess.run(command, cwd=root, check=True)
