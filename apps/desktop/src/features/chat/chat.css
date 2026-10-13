@@ -775,3 +775,29 @@
   gap: 6px;
   padding: 4px 0;
 }
+
+/* Ongoing conversations reserve space for answers; the welcome composer stays spacious. */
+.chat-page:not(.is-empty) .composer textarea {
+  min-height: 36px;
+  max-height: 160px;
+}
+.chat-page:not(.is-empty) .composer-reference-toolbar {
+  margin: 0 0 5px;
+}
+.chat-page:not(.is-empty) .composer-reference-toolbar > span {
+  display: none;
+}
+.chat-page:not(.is-empty) .composer-controls {
+  margin-bottom: 4px;
+}
+.composer-controls > .chat-menu {
+  margin-left: auto;
+}
+.chat-page:not(.is-empty) .composer-footnote {
+  display: none;
+}
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

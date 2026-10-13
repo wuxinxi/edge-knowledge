@@ -45,9 +45,14 @@ const pickerWrap = ref<HTMLElement>()
 function dismiss(event: PointerEvent) {
   if (trigger.value && !pickerWrap.value?.contains(event.target as Node)) trigger.value = ''
 }
-onMounted(() => document.addEventListener('pointerdown', dismiss))
+onMounted(() => {
+  document.addEventListener('pointerdown', dismiss)
+  window.addEventListener('resize', fitInput)
+  fitInput()
+})
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', dismiss)
+  window.removeEventListener('resize', fitInput)
   request++
 })
 const input = ref<HTMLTextAreaElement>(),
@@ -59,6 +64,21 @@ const trigger = ref<'reference' | 'command' | ''>(''),
   start = ref(0),
   end = ref(0),
   selected = ref(0)
+function fitInput() {
+  const node = input.value
+  if (!node) return
+  node.style.height = 'auto'
+  const minimum = parseFloat(getComputedStyle(node).minHeight) || 36
+  node.style.height = Math.min(160, Math.max(minimum, node.scrollHeight)) + 'px'
+  node.style.overflowY = node.scrollHeight > 160 ? 'auto' : 'hidden'
+}
+watch(
+  () => [props.modelValue, props.busy, preferences.values.fontSize],
+  async () => {
+    await nextTick()
+    fitInput()
+  },
+)
 function focus() {
   input.value?.focus()
 }
@@ -319,7 +339,7 @@ watch(
       maxlength="4000"
       :aria-label="t('描述想查找的资料或问题')"
       :placeholder="mode === 'search' ? t('描述你想查找的资料…') : t('根据你的资料，问一个问题…')"
-      rows="2"
+      rows="1"
       :aria-expanded="!!trigger"
       :aria-controls="trigger ? 'composer-options' : undefined"
       :aria-activedescendant="trigger && results.length ? `composer-option-${selected}` : undefined"

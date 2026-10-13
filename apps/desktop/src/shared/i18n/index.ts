@@ -2,6 +2,8 @@ import { usePreferences } from '../preferences/store'
 
 // Product copy is translated here; source text and model answers retain their original language.
 const english: Record<string, string> = {
+  资料工具: 'Source tools',
+  '导出 Markdown': 'Export Markdown',
   处理过程: 'Processing activity',
   处理完成: 'Completed',
   连接本地服务: 'Connecting to local service',

@@ -17,6 +17,8 @@ import ComposerInput from './ComposerInput.vue'
 import { useI18n } from '../../shared/i18n'
 import ChatMessage from './ChatMessage.vue'
 import QueryBuilder from './QueryBuilder.vue'
+import ChatMenu from './ChatMenu.vue'
+import { followsLatest } from './scroll'
 import type { QuerySpec } from '../../shared/types/query'
 import './chat.css'
 
@@ -49,17 +51,11 @@ function latestResponseTop() {
 function trackScroll() {
   const node = scroller.value
   const top = latestResponseTop()
-  const response = node?.querySelector<HTMLElement>('.chat-turn.assistant:last-child')
   if (node)
-    followLatest.value =
-      node.scrollHeight - node.scrollTop - node.clientHeight < 100 ||
-      Boolean(
-        localResultAtTop() &&
-        top !== undefined &&
-        response &&
-        top < node.clientHeight &&
-        top + response.getBoundingClientRect().height > 0,
-      )
+    followLatest.value = followsLatest(
+      node.scrollHeight - node.scrollTop - node.clientHeight,
+      localResultAtTop() ? top : undefined,
+    )
 }
 function scrollLatest(behavior: ScrollBehavior = 'smooth') {
   followLatest.value = true
@@ -230,11 +226,14 @@ watch(
       </div>
       <div class="chat-header-actions">
         <span class="local-badge"><ShieldCheck :size="13" />{{ t('本地优先') }}</span>
-        <button v-if="messages.length" class="text-button" @click="exportChat">
-          {{ t('导出对话') }}</button
-        ><button v-if="messages.length" class="text-button" @click="exportCompleteChat">
-          {{ t('导出完整记录') }}
-        </button>
+        <ChatMenu v-if="messages.length" :label="t('导出对话')">
+          <button type="button" @click="exportChat">
+            <FileText :size="14" />{{ t('导出 Markdown') }}
+          </button>
+          <button type="button" @click="exportCompleteChat">
+            <Database :size="14" />{{ t('导出完整记录') }}
+          </button>
+        </ChatMenu>
       </div>
     </header>
     <div ref="scroller" class="chat-scroll" @scroll="trackScroll">
@@ -297,15 +296,12 @@ watch(
               <Sparkles :size="13" />{{ t(localModel ? '本地助手' : 'DeepSeek 解读') }}
             </button>
           </div>
-          <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
-          <button
-            type="button"
-            class="query-builder-trigger"
-            :disabled="chat.busy || !app.health"
-            @click="checkDuplicates"
-          >
-            <Copy :size="13" />{{ t('检查重复') }}
-          </button>
+          <ChatMenu :label="t('资料工具')" :disabled="chat.busy || !app.health">
+            <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
+            <button type="button" :disabled="chat.busy || !app.health" @click="checkDuplicates">
+              <Copy :size="13" />{{ t('检查重复') }}
+            </button>
+          </ChatMenu>
         </div>
         <ComposerInput
           ref="composerInput"
