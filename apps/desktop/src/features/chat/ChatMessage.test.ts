@@ -251,3 +251,18 @@ it('limits inline results to four files and reveals the remaining files without 
   expect(root.querySelectorAll('.answer-source-result')).toHaveLength(7)
   expect(api.imageAsset).toHaveBeenCalledTimes(7)
 })
+
+it('labels statistics correctly and keeps supporting documents folded below the calculated result', async () => {
+  await mount({
+    id: 'statistics',
+    role: 'assistant',
+    mode: 'search',
+    content: '共 3 份笔记',
+    queryPlan: { operation: 'aggregate', metric: 'count' },
+    sources: [{ ...imageSource, kind: 'document', filename: 'notes.md' }],
+  })
+  expect(root.querySelector('.assistant-mode')?.textContent).toContain('本地统计')
+  expect(root.querySelector('.source-document-excerpt')).toBeNull()
+  expect(root.querySelector('.source-disclosure')?.getAttribute('aria-expanded')).toBe('false')
+  expect(root.textContent).toContain('共 3 份笔记')
+})

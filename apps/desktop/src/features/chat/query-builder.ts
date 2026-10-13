@@ -21,11 +21,13 @@ export const queryFields = [
 export interface FilterDraft {
   field: string
   op: NonNullable<QueryFilter['op']>
-  value: string
+  value: string | number
   custom: string
 }
 export interface QueryDraft {
   operation: 'list' | 'aggregate' | 'duplicates'
+  period?: { month: string; field: string }
+  threshold?: number
   logic: 'all' | 'any'
   filters: FilterDraft[]
   metric: NonNullable<QuerySpec['metric']>
@@ -37,14 +39,109 @@ export interface QueryDraft {
   limit: number
   offset: number
 }
+export function monthRange(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('请选择有效月份。')
+  const [year, number] = month.split('-').map(Number) as [number, number]
+  if (year < 1 || number < 1 || number > 12 || (year === 9999 && number === 12))
+    throw new Error('请选择有效月份。')
+  return [
+    `${month}-01`,
+    `${String(number === 12 ? year + 1 : year).padStart(4, '0')}-${String(number === 12 ? 1 : number + 1).padStart(2, '0')}-01`,
+  ]
+}
+export function defaultQueryDraft(): QueryDraft {
+  return {
+    operation: 'aggregate',
+    logic: 'all',
+    filters: [{ field: 'kind', op: 'eq', value: 'document', custom: '' }],
+    metric: 'count',
+    metricField: 'size',
+    group: '',
+    date: 'created_date',
+    order: 'title',
+    descending: false,
+    limit: 20,
+    offset: 0,
+  }
+}
+export const queryOperators = [
+  ['eq', '等于'],
+  ['ne', '不等于'],
+  ['contains', '包含'],
+  ['in', '属于任一'],
+  ['gte', '大于或等于'],
+  ['gt', '大于'],
+  ['lte', '小于或等于'],
+  ['lt', '小于'],
+  ['exists', '已标注'],
+  ['missing', '未标注'],
+] as const
+export function operatorsFor(field: string) {
+  if (field === 'kind')
+    return queryOperators.filter(([op]) => ['eq', 'ne', 'exists', 'missing'].includes(op))
+  if (
+    field.endsWith('_date') ||
+    field === 'folder_month' ||
+    ['size', 'duration', 'chunks'].includes(field)
+  )
+    return queryOperators.filter(([op]) => op !== 'contains')
+  if (field === 'metadata') return queryOperators
+  return queryOperators.filter(([op]) => !['gte', 'gt', 'lte', 'lt'].includes(op))
+}
+export function operatorLabel(field: string, op: string) {
+  const dates: Record<string, string> = { gte: '不早于', gt: '晚于', lte: '不晚于', lt: '早于' }
+  return (
+    ((field.endsWith('_date') || field === 'folder_month') && dates[op]) ||
+    queryOperators.find(([key]) => key === op)?.[1] ||
+    op
+  )
+}
+export function applyQueryPreset(
+  draft: QueryDraft,
+  preset: 'month' | 'tags' | 'undated' | 'duplicates',
+  month: string,
+) {
+  Object.assign(draft, defaultQueryDraft(), { period: undefined, threshold: undefined })
+  if (preset === 'month') draft.period = { field: 'created_date', month }
+  if (preset === 'tags') {
+    draft.group = 'tags'
+    draft.order = 'count'
+    draft.descending = true
+  }
+  if (preset === 'undated') {
+    draft.operation = 'list'
+    draft.filters.push({ field: 'created_date', op: 'missing', value: '', custom: '' })
+  }
+  if (preset === 'duplicates') {
+    draft.operation = 'duplicates'
+    draft.threshold = 0.9
+  }
+}
 export function buildQuery(draft: QueryDraft): QuerySpec {
+  if (
+    !Number.isInteger(draft.limit) ||
+    draft.limit < 1 ||
+    draft.limit > 50 ||
+    !Number.isInteger(draft.offset) ||
+    draft.offset < 0 ||
+    draft.offset > 10000
+  )
+    throw new Error('展示数量需要 1–50，跳过数量需要 0–10000 的整数。')
+  if (
+    draft.operation === 'duplicates' &&
+    (!Number.isFinite(draft.threshold ?? 0.9) ||
+      (draft.threshold ?? 0.9) < 0 ||
+      (draft.threshold ?? 0.9) > 1)
+  )
+    throw new Error('相似度需要 0–1 的有效数值。')
   if (draft.operation === 'aggregate' && draft.metric !== 'count' && !draft.metricField.trim())
     throw new Error('请填写需要统计的字段名称。')
   const filters = draft.filters.map((row): QueryFilter => {
     const field = row.field === 'metadata' ? `metadata.${row.custom.trim()}` : row.field
     if (!field || field === 'metadata.') throw new Error('请填写自定义字段名称。')
     if (['exists', 'missing'].includes(row.op)) return { field, op: row.op }
-    if (!row.value.trim()) throw new Error('请填写每个筛选条件的值，或移除空条件。')
+    const input = String(row.value ?? '').trim()
+    if (!input) throw new Error('请填写每个筛选条件的值，或移除空条件。')
     const numeric =
       ['size', 'duration', 'chunks'].includes(field) ||
       (field.startsWith('metadata.') && ['gt', 'gte', 'lt', 'lte'].includes(row.op))
@@ -53,26 +150,41 @@ export function buildQuery(draft: QueryDraft): QuerySpec {
       if (numeric && !Number.isFinite(value)) throw new Error('数值条件格式无效。')
       return value
     }
+    if (row.op === 'in' && !input.split(/[,，]/).some((v) => v.trim()))
+      throw new Error('请至少填写一个条件值。')
     return {
       field,
       op: row.op,
       value:
         row.op === 'in'
-          ? row.value
+          ? input
               .split(/[,，]/)
               .map((v) => v.trim())
               .filter(Boolean)
               .map(scalar)
-          : scalar(row.value),
+          : scalar(input),
     }
   })
+  let where: QueryFilter = { [draft.logic]: filters }
+  if (draft.period) {
+    const [start, end] = monthRange(draft.period.month)
+    where = {
+      all: [
+        where,
+        { field: draft.period.field, op: 'gte', value: start! },
+        { field: draft.period.field, op: 'lt', value: end! },
+      ],
+    }
+  }
+  const aggregate = draft.operation === 'aggregate'
+  const grouped = aggregate && !!draft.group
   return {
     version: 1,
     operation: draft.operation,
-    where: { [draft.logic]: filters },
-    metric: draft.metric,
+    where,
+    metric: aggregate ? draft.metric : 'count',
     metric_field:
-      draft.metric === 'count'
+      !aggregate || draft.metric === 'count'
         ? 'size'
         : ['size', 'duration', 'chunks'].includes(draft.metricField.trim()) ||
             draft.metricField.startsWith('metadata.')
@@ -80,13 +192,14 @@ export function buildQuery(draft: QueryDraft): QuerySpec {
           : `metadata.${draft.metricField.trim()}`,
     group_by: draft.operation === 'aggregate' ? draft.group : '',
     group_date: draft.date,
-    order_by: draft.order,
+    order_by: !grouped && ['key', 'value', 'count'].includes(draft.order) ? 'title' : draft.order,
     descending: draft.descending,
     limit: draft.limit,
     offset: draft.offset,
+    ...(draft.operation === 'duplicates' ? { threshold: draft.threshold ?? 0.9 } : {}),
   }
 }
-export function queryLabel(draft: QueryDraft) {
+export function queryLabel(draft: QueryDraft, t: (value: string) => string = (value) => value) {
   const action =
     draft.operation === 'duplicates'
       ? '检查重复笔记'
@@ -120,16 +233,24 @@ export function queryLabel(draft: QueryDraft) {
     video: '视频',
     bundle: '联合素材',
   }
-  const conditions = draft.filters.map(
-    (row) =>
-      `${queryFields.find(([key]) => key === row.field)?.[1] ?? row.field} ${row.op === 'missing' ? '未标注' : row.op === 'exists' ? '已标注' : row.field === 'kind' ? (kindLabels[row.value] ?? row.value) : row.value}`,
-  )
+  const conditions = draft.filters.map((row) => {
+    const field =
+      row.field === 'metadata'
+        ? row.custom
+        : (queryFields.find(([key]) => key === row.field)?.[1] ?? row.field)
+    const value = row.field === 'kind' ? t(kindLabels[row.value] ?? row.value) : row.value
+    return `${t(field)} ${t(operatorLabel(row.field, row.op))}${['missing', 'exists'].includes(row.op) ? '' : ' ' + value}`
+  })
+  const period = draft.period
+    ? `${t(queryFields.find(([key]) => key === draft.period!.field)?.[1] ?? draft.period.field)} ${draft.period.month}`
+    : ''
+  const joined = conditions.join(` ${t(draft.logic === 'all' ? '且' : '或')} `)
+  const conditionText = draft.logic === 'any' && conditions.length > 1 ? `(${joined})` : joined
   return (
-    groupLabel +
-    action +
-    metricLabel +
-    (conditions.length
-      ? '：' + conditions.join(draft.logic === 'all' ? '，' : ' 或 ')
-      : '：当前资料范围')
+    [t(groupLabel), t(action), metricLabel ? t(fieldLabel) : ''].filter(Boolean).join(' ') +
+    t('：') +
+    [period, conditions.length ? conditionText : t('当前资料范围')]
+      .filter(Boolean)
+      .join(` ${t('且')} `)
   )
 }

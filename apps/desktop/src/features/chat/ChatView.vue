@@ -297,7 +297,15 @@ watch(
             </button>
           </div>
           <ChatMenu :label="t('资料工具')" :disabled="chat.busy || !app.health">
-            <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
+            <QueryBuilder
+              :disabled="chat.busy || !app.health"
+              :scope-label="
+                references.length
+                  ? `${references.length} ${t('份引用资料')}`
+                  : libraryName(app.activeLibrary, app.currentLibrary?.name ?? t('我的知识库'))
+              "
+              @execute="executeLocalQuery"
+            />
             <button type="button" :disabled="chat.busy || !app.health" @click="checkDuplicates">
               <Copy :size="13" />{{ t('检查重复') }}
             </button>

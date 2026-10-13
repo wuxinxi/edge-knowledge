@@ -159,3 +159,11 @@
 原生单选下拉框统一右侧箭头：16px 图标、距离右边 12px、文字预留 38px，浅色与深色分别提供合适对比度。保留原生选项、键盘选择和辅助技术支持，多选列表不套用箭头；高对比度系统使用原生箭头。样式覆盖侧栏、资料库、设置、工作台及弹窗，不依赖逐页面修补。
 
 321 项测试、类型/静态检查与构建通过。浏览器读取侧栏、资料类型、排序、语言、字体、快捷键控件的实际样式，均为右侧 12px 和 38px 文字留白；浅深色验收图为 `previews/select-spacing-library-light.png`、`previews/select-spacing-library.png`。
+
+## 2026-10-13 筛选与统计面板重构
+
+用途卡片、常用查询、带标签的条件行、月份选择、统计方式与固定执行预览重新排版。补齐控件边框、按钮样式和字号层级，移除旧的裸下拉和无按钮样式布局。更多选项保留数值汇总、自定义属性、分组、排序与分页；日期条件使用明确文案。当前知识库/引用范围始终可见，月份约束不因任一条件关系而扩大。统计结果标记本地统计并折叠依据。
+
+327 项测试（114 TypeScript、213 Python）、类型/静态检查与构建通过。回归覆盖月份快捷查询、跨年/低年份日期、任一条件与月份相交、隐藏统计字段不污染查找、缺失日期与比较、分页与数字输入校验、任一条件预览括号及统计依据折叠。真实浏览器在演示库选 2026-09 与标签分组，匹配 3 份笔记，工作 2、技术 2、学习 1；没有调用生成模型或云端。浅深色、英文、600×700 窄窗口已检查；窄面板正文宽和滚动宽均 566px，底部执行区在窗口内。
+
+截图：`previews/query-builder-overview-dark.png`、`previews/query-builder-overview-light.png`、`previews/query-builder-month-tags.png`、`previews/query-builder-statistics-result.png`、`previews/query-builder-dark-english.png`、`previews/query-builder-narrow-english.png`。全部使用独立演示资料，无用户笔记变更。

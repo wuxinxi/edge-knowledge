@@ -675,81 +675,6 @@
   gap: 6px;
   font-size: 12px;
 }
-.action-dialog.query-builder-dialog {
-  width: min(720px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
-  padding: 24px;
-  overflow: auto;
-}
-.query-builder-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.query-builder-heading h2 {
-  margin: 0;
-  font-size: 18px;
-}
-.query-builder-heading p,
-.query-builder-note {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.query-builder-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 14px 0;
-}
-.query-builder-row label {
-  display: grid;
-  gap: 6px;
-  flex: 1 1 140px;
-  font-size: 12px;
-}
-.query-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-  align-items: center;
-}
-.query-filter-row select,
-.query-filter-row input {
-  flex: 1 1 130px;
-  min-width: 0;
-}
-.query-builder-filters {
-  border-block: 1px solid var(--line);
-  padding: 16px 0;
-}
-.query-builder-options {
-  margin: 16px 0;
-  font-size: 12px;
-}
-.query-builder-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-.query-builder-note svg {
-  flex: 0 0 auto;
-  margin-top: 3px;
-}
-.query-builder-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-.query-builder-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .composer-controls {
   display: flex;
   flex-wrap: wrap;
@@ -764,16 +689,6 @@
 .composer-controls .query-builder-trigger {
   margin: 0;
   white-space: nowrap;
-}
-.query-builder-dialog input {
-  margin-top: 0;
-}
-
-.query-builder-filters .text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
 }
 
 /* Ongoing conversations reserve space for answers; the welcome composer stays spacious. */

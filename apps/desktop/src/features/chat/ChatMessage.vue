@@ -75,19 +75,25 @@ async function copy() {
           t(
             generating && !message.generator && !message.content
               ? '处理中'
-              : message.comparisons?.length
+              : message.queryPlan?.operation === 'aggregate'
                 ? message.planner === 'deepseek'
-                  ? '重复检查 · AI 规划'
-                  : '本地重复检查'
-                : message.planner === 'deepseek' && message.mode === 'search'
-                  ? '本机结果 · AI 规划'
-                  : message.planner === 'local_model' && message.mode === 'search'
-                    ? '本机结果 · 本地模型规划'
-                    : message.mode === 'search' || (generating && task?.phase === '查找资料')
-                      ? '本地检索'
-                      : message.generator === 'local'
-                        ? '本地模型回答'
-                        : 'DeepSeek 解读',
+                  ? '本机统计 · AI 规划'
+                  : message.planner === 'local_model'
+                    ? '本机统计 · 本地模型规划'
+                    : '本地统计'
+                : message.comparisons?.length
+                  ? message.planner === 'deepseek'
+                    ? '重复检查 · AI 规划'
+                    : '本地重复检查'
+                  : message.planner === 'deepseek' && message.mode === 'search'
+                    ? '本机结果 · AI 规划'
+                    : message.planner === 'local_model' && message.mode === 'search'
+                      ? '本机结果 · 本地模型规划'
+                      : message.mode === 'search' || (generating && task?.phase === '查找资料')
+                        ? '本地检索'
+                        : message.generator === 'local'
+                          ? '本地模型回答'
+                          : 'DeepSeek 解读',
           )
         }}</span>
       </div>
@@ -141,7 +147,7 @@ async function copy() {
           ref="sourcesPanel"
           :sources="message.sources"
           :library="library"
-          :inline="message.mode === 'search'"
+          :inline="message.mode === 'search' && message.queryPlan?.operation !== 'aggregate'"
         />
         <details v-if="message.versions?.length" class="answer-history">
           <summary>{{ t('历史回答') }} · {{ message.versions.length }}</summary>
@@ -167,7 +173,7 @@ async function copy() {
             <AnswerSources
               :sources="version.sources"
               :library="library"
-              :inline="message.mode === 'search'"
+              :inline="message.mode === 'search' && message.queryPlan?.operation !== 'aggregate'"
             />
           </details>
         </details>

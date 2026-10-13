@@ -356,6 +356,7 @@ export const useChatStore = defineStore('chat', () => {
       answer.processing!.steps.push({ stage: value, startedAt: Date.now() })
       tasks.update(feedback, { phase: stageLabels[value] })
     }
+    answer.queryPlan = queryPlan ? JSON.parse(JSON.stringify(queryPlan)) : undefined
     stage(mode === 'search' ? 'querying' : 'waiting')
     try {
       await persist()
@@ -380,6 +381,7 @@ export const useChatStore = defineStore('chat', () => {
             : t(result.content)
         answer.notice = t(result.notice)
         answer.planner = result.query?.planner
+        answer.queryPlan = result.query?.plan ?? answer.queryPlan
         answer.status = 'complete'
         await persist()
         return
