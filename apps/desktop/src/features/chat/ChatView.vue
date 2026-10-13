@@ -6,7 +6,6 @@ import {
   Database,
   FileText,
   Layers3,
-  Plus,
   Search,
   Square,
   Sparkles,
@@ -16,6 +15,8 @@ import { useChatStore } from './store'
 import ComposerInput from './ComposerInput.vue'
 import { useI18n } from '../../shared/i18n'
 import ChatMessage from './ChatMessage.vue'
+import QueryBuilder from './QueryBuilder.vue'
+import type { QuerySpec } from '../../shared/types/query'
 import './chat.css'
 
 const app = useAppStore()
@@ -29,23 +30,73 @@ const cloudVision = computed(
 )
 const scroller = ref<HTMLElement>()
 const followLatest = ref(true)
+function localResultAtTop() {
+  const last = messages.value.at(-1)
+  return last?.mode === 'search' && last.status === 'complete' && last.sources.length > 0
+}
+function latestResponseTop() {
+  const node = scroller.value
+  const response = node?.querySelector<HTMLElement>('.chat-turn.assistant:last-child')
+  return node && response
+    ? response.getBoundingClientRect().top - node.getBoundingClientRect().top
+    : undefined
+}
 function trackScroll() {
   const node = scroller.value
-  if (node) followLatest.value = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+  const top = latestResponseTop()
+  const response = node?.querySelector<HTMLElement>('.chat-turn.assistant:last-child')
+  if (node)
+    followLatest.value =
+      node.scrollHeight - node.scrollTop - node.clientHeight < 100 ||
+      Boolean(
+        localResultAtTop() &&
+        top !== undefined &&
+        response &&
+        top < node.clientHeight &&
+        top + response.getBoundingClientRect().height > 0,
+      )
 }
-function scrollLatest() {
+function scrollLatest(behavior: ScrollBehavior = 'smooth') {
   followLatest.value = true
-  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
+  const node = scroller.value,
+    responseTop = latestResponseTop()
+  if (node)
+    node.scrollTo({
+      top:
+        localResultAtTop() && responseTop !== undefined
+          ? Math.max(0, node.scrollTop + responseTop - 16)
+          : node.scrollHeight,
+      behavior,
+    })
 }
 const composerInput = ref<InstanceType<typeof ComposerInput>>()
 const conversation = computed(() => chat.current(app.activeLibrary))
 const messages = computed(() => conversation.value?.messages ?? [])
 const references = computed(() => conversation.value?.references ?? [])
+// The /new command remains available without duplicating visible navigation.
 function newChat() {
-  if (!messages.value.length) return
+  if (conversation.value && !messages.value.length) return
   chat.create(app.activeLibrary)
   question.value = ''
   allowImageUpload.value = false
+}
+function exportCompleteChat() {
+  if (!conversation.value) return
+  const content = JSON.stringify(
+    {
+      version: 1,
+      sessions: [conversation.value],
+      active: { [app.activeLibrary]: conversation.value.id },
+    },
+    null,
+    2,
+  )
+  const url = URL.createObjectURL(new Blob([content], { type: 'application/json;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `conversation-${conversation.value.id}.json`
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 function exportChat() {
   if (!conversation.value) return
@@ -118,6 +169,12 @@ async function retryMessage(id: string) {
   allowImageUpload.value = false
   await chat.retry(app.activeLibrary, id, allowed)
 }
+async function executeLocalQuery(plan: QuerySpec, label: string) {
+  if (chat.busy || !app.health) return
+  followLatest.value = true
+  allowImageUpload.value = false
+  await chat.ask(app.activeLibrary, label, 'search', false, plan)
+}
 function useExample(example: (typeof examples.value)[number]) {
   mode.value = example.mode
   question.value = example.question
@@ -126,7 +183,10 @@ function useExample(example: (typeof examples.value)[number]) {
 watch(
   () => [app.activeLibrary, chat.activeByLibrary[app.activeLibrary]],
   () => {
-    chat.stop()
+    // The first send creates its own session. Keep that request running; stop only
+    // when navigation leaves the conversation that owns the active answer.
+    if (!conversation.value?.messages.some((message) => message.id === chat.activeAnswerId))
+      chat.stop()
     followLatest.value = true
     question.value = ''
     allowImageUpload.value = false
@@ -136,11 +196,13 @@ watch(mode, () => {
   allowImageUpload.value = false
 })
 watch(
-  () => messages.value.map((message) => message.content + message.error).join(''),
+  () =>
+    messages.value
+      .map((message) => message.content + message.error + message.status + message.mode)
+      .join(''),
   async () => {
     await nextTick()
-    if (followLatest.value)
-      scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'instant' })
+    if (followLatest.value) scrollLatest('instant')
   },
 )
 </script>
@@ -158,12 +220,8 @@ watch(
         <span class="local-badge"><ShieldCheck :size="13" />{{ t('本地优先') }}</span>
         <button v-if="messages.length" class="text-button" @click="exportChat">
           {{ t('导出对话') }}</button
-        ><button
-          class="button secondary small"
-          :disabled="chat.busy || !messages.length"
-          @click="newChat"
-        >
-          <Plus :size="16" />{{ t('新对话') }}
+        ><button v-if="messages.length" class="text-button" @click="exportCompleteChat">
+          {{ t('导出完整记录') }}
         </button>
       </div>
     </header>
@@ -187,6 +245,7 @@ watch(
           :key="message.id"
           :message="message"
           :library="app.activeLibrary"
+          :task="message.id === chat.activeAnswerId ? chat.activeTask : undefined"
           :generating="chat.busy && index === messages.length - 1"
           :can-retry="!chat.busy && index === messages.length - 1"
           @retry="retryMessage(message.id)"
@@ -200,30 +259,33 @@ watch(
         v-if="messages.length && !followLatest"
         type="button"
         class="jump-to-latest"
-        @click="scrollLatest"
+        @click="scrollLatest()"
       >
         {{ t('回到最新回复') }} ↓
       </button>
       <form class="composer" @submit.prevent="send()">
-        <div class="mode-selector" role="group" :aria-label="t('助手模式')">
-          <button
-            type="button"
-            :aria-pressed="mode === 'search'"
-            :class="{ selected: mode === 'search' }"
-            :disabled="chat.busy"
-            @click="mode = 'search'"
-          >
-            <Search :size="13" />{{ t('查找资料') }}
-          </button>
-          <button
-            type="button"
-            :aria-pressed="mode === 'chat'"
-            :class="{ selected: mode === 'chat' }"
-            :disabled="chat.busy"
-            @click="mode = 'chat'"
-          >
-            <Sparkles :size="13" />{{ t('资料问答') }}
-          </button>
+        <div class="composer-controls">
+          <div class="mode-selector" role="group" :aria-label="t('助手模式')">
+            <button
+              type="button"
+              :aria-pressed="mode === 'search'"
+              :class="{ selected: mode === 'search' }"
+              :disabled="chat.busy"
+              @click="mode = 'search'"
+            >
+              <Search :size="13" />{{ t('查找资料') }}
+            </button>
+            <button
+              type="button"
+              :aria-pressed="mode === 'chat'"
+              :class="{ selected: mode === 'chat' }"
+              :disabled="chat.busy"
+              @click="mode = 'chat'"
+            >
+              <Sparkles :size="13" />{{ t('AI 解读') }}
+            </button>
+          </div>
+          <QueryBuilder :disabled="chat.busy || !app.health" @execute="executeLocalQuery" />
         </div>
         <ComposerInput
           ref="composerInput"
@@ -281,10 +343,12 @@ watch(
           mode === 'search'
             ? t('文档、图片、音视频在本机检索，不调用 DeepSeek。')
             : cloudVision
-              ? t('云端看图需要支持图片的模型，并需勾选本次发送图片授权。')
-              : t('默认通过本地 OCR 读取图片文字，仅向 DeepSeek 发送相关文字证据。') +
-                ' ' +
-                t('对话历史仅用于理解追问，回答仍以本次检索资料为依据。')
+                ? t('云端看图需要支持图片的模型，并需勾选本次发送图片授权。')
+                : t(
+                    'AI 模式可向 DeepSeek 发送问题与查询字段进行规划，统计由本机计算；总结和解读会发送相关文字。',
+                  ) +
+                  ' ' +
+                  t('对话历史仅用于理解追问，回答仍以本次检索资料为依据。')
         }}
       </div>
     </div>

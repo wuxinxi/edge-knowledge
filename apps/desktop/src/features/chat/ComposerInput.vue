@@ -95,8 +95,8 @@ const commands = computed(() => [
   {
     id: 'ask',
     alias: '问答',
-    label: t('根据资料问答'),
-    description: t('根据资料生成有出处的回答'),
+    label: t('AI 解读'),
+    description: t('通过 DeepSeek 总结与解释资料'),
     icon: Sparkles,
   },
   {
