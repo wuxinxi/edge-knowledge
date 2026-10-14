@@ -213,10 +213,17 @@ class SemanticService:
             query = unit([sum(v[i] for v in vectors) / len(vectors) for i in range(dimension)])
             # MRL compares equal-dimensional, renormalized prefixes of stored full vectors.
             hits = []
+            paths = {doc.id: doc.source_path for doc in docs}
             for hit, vector in self.knowledge.repository.vectors(library):
                 if ids and hit.document_id not in ids or kinds and hit.kind not in kinds:
                     continue
-                hits.append(replace(hit, score=round(cosine(query, unit(vector, dimension)), 4)))
+                hits.append(
+                    replace(
+                        hit,
+                        score=round(cosine(query, unit(vector, dimension)), 4),
+                        path=paths.get(hit.document_id, ""),
+                    )
+                )
             filtered, strategy, candidate_count = select_media_hits(
                 text, hits, min_score, match_mode, not assets
             )

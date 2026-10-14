@@ -1,21 +1,50 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Copy, Check } from '@lucide/vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { Copy, Check, ChevronDown } from '@lucide/vue'
 import type { Source } from '../../shared/types/api'
 import { useI18n } from '../../shared/i18n'
 import ImagePreview from '../../shared/components/ImagePreview.vue'
 import MediaPreview from '../../shared/components/MediaPreview.vue'
 import MarkdownAnswer from './MarkdownAnswer.vue'
 import { sourcePreview } from './source-preview'
-const props = defineProps<{ source: Source; library: string }>()
+const props = defineProps<{ source: Source; library: string; compact?: boolean }>()
 const { t } = useI18n()
 const copied = ref(false),
   error = ref('')
 const media = computed(() => ['audio', 'video', 'bundle'].includes(props.source.kind ?? ''))
 const image = computed(() => props.source.kind === 'image')
 const preview = computed(() => sourcePreview(props.source.text))
-const excerpt = computed(() =>
-  preview.value.body.length > 1200 ? preview.value.body.slice(0, 1200) + '…' : preview.value.body,
+const expanded = ref(false),
+  overflowed = ref(false),
+  excerptElement = ref<HTMLElement>()
+const hasMore = computed(
+  () => props.compact && (overflowed.value || preview.value.body.length > 1200),
+)
+let observer: ResizeObserver | undefined
+function measure() {
+  const body = excerptElement.value?.querySelector<HTMLElement>('.markdown-answer')
+  overflowed.value = !!body && body.scrollHeight > 240
+}
+function observe() {
+  observer?.disconnect()
+  const body = excerptElement.value?.querySelector<HTMLElement>('.markdown-answer')
+  if (body && props.compact) observer?.observe(body)
+  measure()
+}
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined') observer = new ResizeObserver(measure)
+  observe()
+})
+onBeforeUnmount(() => observer?.disconnect())
+watch(
+  () => [props.source.text, props.compact],
+  async () => {
+    expanded.value = false
+    copied.value = false
+    error.value = ''
+    await nextTick()
+    observe()
+  },
 )
 async function copy() {
   try {
@@ -48,7 +77,33 @@ async function copy() {
           <dd>{{ field.value }}</dd>
         </div>
       </dl>
-      <MarkdownAnswer v-if="excerpt" :content="excerpt" :source-count="0" />
+      <p v-if="source.section" class="source-section-label">{{ source.section }}</p>
+      <div
+        ref="excerptElement"
+        class="source-excerpt-reading"
+        :class="{ 'is-clipped': hasMore && !expanded }"
+        @focusin="expanded = true"
+      >
+        <MarkdownAnswer v-if="preview.body" :content="preview.body" :source-count="0" />
+      </div>
+      <div class="source-reading-actions">
+        <button
+          v-if="hasMore"
+          type="button"
+          class="answer-action"
+          :aria-expanded="expanded"
+          @click="expanded = !expanded"
+        >
+          {{ t(expanded ? '收起阅读' : '展开阅读')
+          }}<ChevronDown :size="13" :class="{ rotated: expanded }" />
+        </button>
+        <button type="button" class="answer-action" @click="copy">
+          <Check v-if="copied" :size="13" /><Copy v-else :size="13" />{{
+            t(copied ? '已复制' : '复制片段')
+          }}
+        </button>
+        <span v-if="error" class="message-copy-status" role="alert">{{ error }}</span>
+      </div>
     </div>
     <p v-if="image" class="source-content-caption">
       {{ t('本地图片') }} ·
@@ -63,12 +118,12 @@ async function copy() {
         {{ t('图表的坐标、图例和标签会被识别为文字，请结合原图阅读。') }}
       </p>
       <pre>{{ source.text }}</pre>
-      <button class="answer-action" type="button" @click="copy">
+      <button v-if="image" class="answer-action" type="button" @click="copy">
         <Check v-if="copied" :size="13" /><Copy v-else :size="13" />{{
           t(copied ? '已复制' : '复制原文')
         }}
       </button>
-      <span v-if="error" class="message-copy-status" role="alert">{{ error }}</span>
+      <span v-if="image && error" class="message-copy-status" role="alert">{{ error }}</span>
     </details>
     <p v-else-if="!image && !source.text" class="source-content-caption">
       {{ t('媒体语义检索结果，请查看本地原件。') }}

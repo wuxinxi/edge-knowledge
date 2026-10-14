@@ -254,6 +254,9 @@ const english: Record<string, string> = {
   准备中: 'Preparing',
   处理中: 'Processing',
   草稿: 'Draft',
+  展开阅读: 'Read more',
+  收起阅读: 'Read less',
+  复制片段: 'Copy excerpt',
   分析资料: 'Analyzing files',
   '正在本地分析选定资料，首次加载模型可能较慢。':
     'Analyzing selected files locally. The model may take longer on first use.',

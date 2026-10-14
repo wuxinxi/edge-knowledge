@@ -559,9 +559,41 @@
   font-size: var(--text-caption);
   padding: 0 14px 12px;
 }
-.inline-source-grid .source-document-excerpt {
+.answer-source-grid.document-source-grid {
+  grid-template-columns: 1fr;
+  max-width: none;
+}
+.inline-source-grid > .source-document-result {
+  grid-column: 1 / -1;
+}
+.source-section-label {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+.source-excerpt-reading.is-clipped {
   max-height: 240px;
-  overflow: auto;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);
+}
+.source-reading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.source-reading-actions .rotated {
+  transform: rotate(180deg);
+}
+.source-path {
+  overflow-wrap: anywhere;
+  font-size: var(--text-caption);
+  color: var(--muted);
+}
+.source-preview-heading .source-path {
+  margin-top: 6px;
 }
 .inline-source-grid .source-content-image > .image-preview {
   height: 180px;
@@ -641,6 +673,11 @@
 .source-document-excerpt .markdown-answer {
   font-size: var(--text-body);
   line-height: 1.75;
+}
+.source-document-excerpt .markdown-answer :is(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--text-body);
+  line-height: 1.55;
+  margin: 12px 0 7px;
 }
 .source-document-excerpt .markdown-answer > :first-child {
   margin-top: 0;

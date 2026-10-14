@@ -79,3 +79,26 @@ def test_paraphrase_still_uses_semantic_retrieval_without_exact_words(system):
     _, knowledge, *_ = system
     add(knowledge, "a", "番茄和鸡蛋翻炒。", [1.0, 0.0, 0.0])
     assert knowledge.search("default", "西红柿如何烹饪", 5)[0].document_id == "a" * 64
+
+
+def test_retrieval_preserves_relative_note_path_without_changing_saved_vectors(system):
+    client, knowledge, *_ = system
+    from dataclasses import replace
+
+    document = Document("a" * 64, "index.md", 1, 100, "2026", source_path="项目/部署/index.md")
+    knowledge.repository.add(
+        "default", document, [Chunk("部署步骤", 0, "上线流程")], [[1.0, 0.0, 0.0]]
+    )
+    other = knowledge.repository.create_library("其他资料")
+    knowledge.repository.add(
+        other.id,
+        replace(document, source_path="私人/index.md"),
+        [Chunk("部署步骤", 0, "")],
+        [[1.0, 0.0, 0.0]],
+    )
+    response = client.post("/api/search", json={"library_id": "default", "question": "部署步骤"})
+    assert response.status_code == 200
+    assert response.json()[0]["path"] == "项目/部署/index.md"
+    assert response.json()[0]["section"] == "上线流程"
+    assert "私人" not in response.text
+    assert knowledge.repository.vectors("default")[0][1] == [1.0, 0.0, 0.0]

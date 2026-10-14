@@ -47,6 +47,7 @@ class SearchHit:
     ocr_status: str = "not_applicable"
     start: float = 0
     end: float = 0
+    path: str = ""
 
 
 @dataclass(frozen=True)

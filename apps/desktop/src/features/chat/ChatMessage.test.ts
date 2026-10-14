@@ -266,3 +266,59 @@ it('labels statistics correctly and keeps supporting documents folded below the 
   expect(root.querySelector('.source-disclosure')?.getAttribute('aria-expanded')).toBe('false')
   expect(root.textContent).toContain('共 3 份笔记')
 })
+
+it('lets users read and copy long document results in place and shows paths for same-name notes', async () => {
+  const raw =
+    '# 部署步骤\n\n' + '- 先检查配置，随后验证服务。\n'.repeat(120) + '\n最后一步：查看健康状态。'
+  const source = {
+    document_id: 'doc',
+    filename: 'index.md',
+    path: '项目/部署/index.md',
+    text: raw,
+    section: '上线流程',
+    index: 0,
+    score: 0.9,
+    kind: 'document' as const,
+  }
+  await mount({
+    id: 'reading',
+    role: 'assistant',
+    mode: 'search',
+    content: '找到 2 份相关资料',
+    sources: [source, { ...source, document_id: 'other', path: '笔记/运维/index.md' }],
+  })
+  expect(root.querySelector('.answer-source-grid.document-source-grid')).not.toBeNull()
+  expect(
+    [...root.querySelectorAll('.answer-source-card .source-path')].map((node) => node.textContent),
+  ).toEqual(['项目/部署/index.md', '笔记/运维/index.md'])
+  expect(root.querySelector('.source-section-label')?.textContent).toBe('上线流程')
+  const reading = root.querySelector('.source-excerpt-reading')!
+  expect(reading.classList.contains('is-clipped')).toBe(true)
+  const toggle = [
+    ...root.querySelectorAll<HTMLButtonElement>('.source-reading-actions button'),
+  ].find((button) => button.textContent?.includes('展开阅读'))!
+  toggle.click()
+  await nextTick()
+  expect(reading.classList.contains('is-clipped')).toBe(false)
+  expect(reading.textContent).toContain('最后一步：查看健康状态。')
+  expect(reading.querySelectorAll('li')).toHaveLength(120)
+  const copy = [...root.querySelectorAll<HTMLButtonElement>('.source-reading-actions button')].find(
+    (button) => button.textContent?.includes('复制片段'),
+  )!
+  copy.click()
+  await nextTick()
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(raw)
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  root.querySelector<HTMLButtonElement>('.answer-source-card')!.click()
+  await nextTick()
+  expect(root.querySelector('.source-preview-body .source-excerpt-reading')?.textContent).toContain(
+    '最后一步：查看健康状态。',
+  )
+  expect(root.querySelector('.source-preview-body .is-clipped')).toBeNull()
+  toggle.click()
+  await nextTick()
+  expect(reading.classList.contains('is-clipped')).toBe(true)
+})

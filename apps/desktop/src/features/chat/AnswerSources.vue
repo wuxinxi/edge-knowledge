@@ -23,11 +23,19 @@ const active = ref(0)
 const dialog = ref<HTMLDialogElement>()
 const selected = computed(() => props.sources[active.value])
 const groups = computed(() => {
-  const result = new Map<string, { filename: string; kind: string; indices: number[] }>()
+  const result = new Map<
+    string,
+    { filename: string; path?: string; kind: string; indices: number[] }
+  >()
   props.sources.forEach((source, index) => {
     const key = source.document_id
     if (!result.has(key))
-      result.set(key, { filename: source.filename, kind: source.kind ?? 'document', indices: [] })
+      result.set(key, {
+        filename: source.filename,
+        path: source.path,
+        kind: source.kind ?? 'document',
+        indices: [],
+      })
     result.get(key)!.indices.push(index)
   })
   return [...result.values()]
@@ -89,9 +97,15 @@ watch(
       :class="{
         'inline-source-grid': inline,
         'single-source-grid': inline && visible.length === 1,
+        'document-source-grid': inline && visible.every((group) => group.kind === 'document'),
       }"
     >
-      <article v-for="group in visible" :key="group.indices[0]" class="answer-source-result">
+      <article
+        v-for="group in visible"
+        :key="group.indices[0]"
+        class="answer-source-result"
+        :class="{ 'source-document-result': group.kind === 'document' }"
+      >
         <button class="answer-source-card" @click="open(group.indices[0]!)">
           <span class="answer-source-icon"><component :is="icon(group.kind)" :size="16" /></span
           ><span class="answer-source-info"
@@ -99,6 +113,11 @@ watch(
             ><small
               >{{ group.indices.map((i) => '[' + (i + 1) + ']').join(' ') }} ·
               {{ group.indices.length }} {{ t('个片段') }}</small
+            ><small
+              v-if="group.path && group.path !== group.filename"
+              class="source-path"
+              :title="group.path"
+              >{{ group.path }}</small
             ></span
           ><ChevronRight :size="14" />
         </button>
@@ -111,6 +130,7 @@ watch(
             :key="index"
             :source="sources[index]!"
             :library="library"
+            compact
           />
           <button
             v-if="group.kind !== 'image' && group.indices.length > 1"
@@ -147,6 +167,9 @@ watch(
           <p>
             {{ t('来源片段') }} [{{ active + 1 }}]
             <template v-if="selected.section">· {{ selected.section }}</template>
+          </p>
+          <p v-if="selected.path && selected.path !== selected.filename" class="source-path">
+            {{ selected.path }}
           </p>
         </div>
         <button class="icon-button" :aria-label="t('关闭来源预览')" @click="dialog?.close()">

@@ -1,6 +1,6 @@
 import hashlib
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from threading import RLock
@@ -161,7 +161,11 @@ class KnowledgeService:
                 hits += self.repository.lexical_candidates(
                     library_id, vector, words, candidate_limit, document_ids
                 )
-            return rank_hits(question, hits, top_k, self.settings.read()["min_score"])
+            paths = {doc.id: doc.source_path for doc in documents}
+            return [
+                replace(hit, path=paths.get(hit.document_id, ""))
+                for hit in rank_hits(question, hits, top_k, self.settings.read()["min_score"])
+            ]
 
     def asset(self, library_id: str, document_id: str, thumbnail: bool = False) -> Asset:
         with self._lock:
