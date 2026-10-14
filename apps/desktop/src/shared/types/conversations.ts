@@ -23,6 +23,7 @@ export interface Message {
   content: string
   sources: Source[]
   references?: Reference[]
+  contextReferences?: Reference[]
   mode?: 'search' | 'chat'
   error?: string
   notice?: string
@@ -34,6 +35,7 @@ export interface Message {
   comparisons?: DuplicateComparison[]
 }
 export interface Conversation {
+  contextEnabled?: boolean
   draft?: { content: string; mode: 'search' | 'chat' }
   id: string
   library: string

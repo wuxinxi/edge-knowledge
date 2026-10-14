@@ -41,6 +41,9 @@ class HistoryEntry(StrictBody):
 
 
 class QueryRequest(StrictBody):
+    local_generation_only: bool = False
+    context_document_ids: list[str] = Field(default_factory=list, max_length=10)
+    lookup_mode: bool = False
     progress: bool = False
     library_id: str = "default"
     question: str = Field(min_length=1, max_length=4000)
@@ -67,7 +70,7 @@ class QueryRequest(StrictBody):
             raise ValueError("Invalid timezone") from exc
         return value
 
-    @field_validator("document_ids")
+    @field_validator("document_ids", "context_document_ids")
     @classmethod
     def valid_document_ids(cls, values: list[str]) -> list[str]:
         if any(

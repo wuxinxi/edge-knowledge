@@ -333,7 +333,7 @@ class SQLiteDocumentCatalog:
                             )
                         ]
                     }
-                    if plan.operation in {"search", "answer", "duplicates"}
+                    if plan.operation in {"search", "read", "answer", "duplicates"}
                     else {}
                 ),
             }

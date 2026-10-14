@@ -10,11 +10,19 @@ import {
   Layers3,
   ExternalLink,
   ChevronDown,
+  BookOpen,
+  Sparkles,
 } from '@lucide/vue'
 import type { Source } from '../../shared/types/api'
 import { useI18n } from '../../shared/i18n'
 import SourceContent from './SourceContent.vue'
-const props = defineProps<{ sources: Source[]; library: string; inline?: boolean }>()
+const props = defineProps<{
+  sources: Source[]
+  library: string
+  inline?: boolean
+  actions?: boolean
+}>()
+const emit = defineEmits<{ read: [source: Source]; summarize: [source: Source] }>()
 const { t } = useI18n()
 const expanded = ref(false)
 const extraSnippets = ref(new Set<string>())
@@ -70,8 +78,21 @@ watch(
 <template>
   <section v-if="sources.length" class="answer-sources" :aria-label="t('参考资料')">
     <div class="answer-sources-heading">
-      <span>{{ t(inline ? '检索结果' : '参考资料') }}</span
-      ><span>{{ groups.length }} {{ t('份资料') }} · {{ sources.length }} {{ t('个片段') }}</span
+      <span>{{
+        t(
+          sources.some((source) => source.content_scope === 'full_document')
+            ? '文章全文'
+            : inline
+              ? '检索结果'
+              : '参考资料',
+        )
+      }}</span
+      ><span
+        >{{ groups.length }} {{ t('份资料') }} ·
+        <template v-if="sources.every((source) => source.content_scope === 'full_document')">{{
+          t('完整原文')
+        }}</template>
+        <template v-else>{{ sources.length }} {{ t('个片段') }}</template> </span
       ><button
         v-if="!inline || groups.length > 4"
         class="text-button source-disclosure"
@@ -109,10 +130,19 @@ watch(
         <button class="answer-source-card" @click="open(group.indices[0]!)">
           <span class="answer-source-icon"><component :is="icon(group.kind)" :size="16" /></span
           ><span class="answer-source-info"
-            ><strong :title="group.filename">{{ group.filename }}</strong
+            ><strong :title="group.filename">{{
+              sources[group.indices[0]!]!.content_scope === 'full_document' ||
+              !sources[group.indices[0]!]!.text
+                ? sources[group.indices[0]!]!.section
+                : group.filename
+            }}</strong
             ><small
               >{{ group.indices.map((i) => '[' + (i + 1) + ']').join(' ') }} ·
-              {{ group.indices.length }} {{ t('个片段') }}</small
+              <template v-if="sources[group.indices[0]!]!.content_scope === 'full_document'">{{
+                t('完整原文')
+              }}</template>
+              <template v-else-if="!sources[group.indices[0]!]!.text">{{ t('待阅读') }}</template>
+              <template v-else>{{ group.indices.length }} {{ t('个片段') }}</template></small
             ><small
               v-if="group.path && group.path !== group.filename"
               class="source-path"
@@ -148,6 +178,21 @@ watch(
             · {{ group.indices.length - 1 }}
           </button>
         </template>
+        <div
+          v-if="actions && group.kind === 'document'"
+          class="source-reading-actions article-followup-actions"
+        >
+          <button
+            v-if="sources[group.indices[0]!]!.content_scope !== 'full_document'"
+            class="answer-action"
+            @click="emit('read', sources[group.indices[0]!]!)"
+          >
+            <BookOpen :size="13" />{{ t('阅读全文') }}
+          </button>
+          <button class="answer-action" @click="emit('summarize', sources[group.indices[0]!]!)">
+            <Sparkles :size="13" />{{ t('总结这篇文章') }}<small>{{ t('本地模型') }}</small>
+          </button>
+        </div>
       </article>
     </div>
   </section>
@@ -165,7 +210,9 @@ watch(
         <div>
           <h2>{{ selected.filename }}</h2>
           <p>
-            {{ t('来源片段') }} [{{ active + 1 }}]
+            {{ t(selected.content_scope === 'full_document' ? '完整原文' : '来源片段') }} [{{
+              active + 1
+            }}]
             <template v-if="selected.section">· {{ selected.section }}</template>
           </p>
           <p v-if="selected.path && selected.path !== selected.filename" class="source-path">

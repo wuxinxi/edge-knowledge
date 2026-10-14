@@ -19,6 +19,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
     if (!item || typeof item !== 'object') throw new Error('对话备份格式无效。')
     const chat = item as Conversation
     if (
+      (chat.contextEnabled != null && typeof chat.contextEnabled !== 'boolean') ||
       !string(chat.id, 100) ||
       ids.has(chat.id) ||
       !string(chat.library, 100) ||
@@ -51,6 +52,11 @@ export function validateChatBackup(value: unknown): Conversation[] {
         throw new Error('对话消息格式无效。')
       if (message.resultKind != null && !queryResultKinds.includes(message.resultKind))
         throw new Error('查询结果类型无效。')
+      if (
+        message.contextReferences &&
+        (!Array.isArray(message.contextReferences) || message.contextReferences.length > 10)
+      )
+        throw new Error('资料上下文格式无效。')
       const sources = message.sources.map((source) => {
         if (
           !source ||
@@ -62,6 +68,8 @@ export function validateChatBackup(value: unknown): Conversation[] {
           source.index < 0 ||
           !Number.isFinite(source.score) ||
           (source.path !== undefined && !string(source.path, 4096)) ||
+          (source.content_scope != null &&
+            !['excerpt', 'full_document'].includes(source.content_scope)) ||
           (source.kind && !['document', 'image', 'audio', 'video', 'bundle'].includes(source.kind))
         )
           throw new Error('对话来源格式无效。')
@@ -70,6 +78,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
             throw new Error('媒体时间格式无效。')
         return {
           ...(source.path ? { path: source.path } : {}),
+          ...(source.content_scope ? { content_scope: source.content_scope } : {}),
           document_id: source.document_id,
           filename: source.filename,
           text: source.text,
@@ -211,6 +220,9 @@ export function validateChatBackup(value: unknown): Conversation[] {
               }),
             }
           : {}),
+        ...(message.contextReferences
+          ? { contextReferences: message.contextReferences.map(reference) }
+          : {}),
         ...(message.references ? { references: message.references.map(reference) } : {}),
         ...(message.mode === 'chat' || message.mode === 'search' ? { mode: message.mode } : {}),
         ...(string(message.error, 2000) ? { error: message.error } : {}),
@@ -218,6 +230,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
       }
     })
     return {
+      ...(chat.contextEnabled == null ? {} : { contextEnabled: chat.contextEnabled }),
       id: chat.id,
       library: chat.library,
       title: chat.title,

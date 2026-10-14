@@ -48,6 +48,7 @@ class SearchHit:
     start: float = 0
     end: float = 0
     path: str = ""
+    content_scope: str = "excerpt"
 
 
 @dataclass(frozen=True)

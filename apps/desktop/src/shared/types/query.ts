@@ -1,4 +1,5 @@
-export type QueryOperation = 'list' | 'aggregate' | 'search' | 'answer' | 'clarify' | 'duplicates'
+export type QueryOperation =
+  'list' | 'aggregate' | 'search' | 'read' | 'answer' | 'clarify' | 'duplicates'
 export const queryResultKinds = [
   'retrieval',
   'catalog',
@@ -17,6 +18,8 @@ export interface QueryFilter {
 export interface QuerySpec {
   version?: 1
   operation: QueryOperation
+  use_context?: boolean
+  source_scope?: 'excerpt' | 'full_document'
   where?: QueryFilter
   metric?: 'count' | 'sum' | 'avg' | 'min' | 'max'
   metric_field?: string

@@ -14,6 +14,7 @@ from edge_knowledge.domain.query_parser import local_plan
 from .catalog import CatalogMirror
 from .knowledge import KnowledgeService
 from .ports import QueryPlanner
+from .reading import DocumentReading
 
 LABELS = {
     "authored_date": "写作/发布日期",
@@ -109,6 +110,7 @@ class QueryService:
         self.knowledge, self.mirror, self.search, self.planner = knowledge, mirror, search, planner
         self.local_planner = local_planner
         self.compare = compare
+        self.reading = DocumentReading(knowledge, mirror)
 
     def schema(self, library: str, ids: list[str]):
         with self.knowledge.transaction():
@@ -131,12 +133,16 @@ class QueryService:
         timezone: str = "Asia/Shanghai",
         local_only: bool = False,
         progress: Callable[[str], None] | None = None,
+        local_model_only: bool = False,
+        context_ids: list[str] | None = None,
+        lookup_mode: bool = False,
     ) -> dict | None:
         report = progress or (lambda stage: None)
         ids = ids or []
+        context_ids = context_ids or list(ids)
         with self.knowledge.transaction():
             documents = self.knowledge.repository.documents(library)
-            if not set(ids) <= {doc.id for doc in documents}:
+            if not set(ids + context_ids) <= {doc.id for doc in documents}:
                 raise AppError("引用资料已删除或不属于当前知识库。", 404, "reference_not_found")
             now = datetime.now(ZoneInfo(timezone))
             spec = (
@@ -145,8 +151,11 @@ class QueryService:
                 else local_plan(question, now.date())
             )
             planned = "local"
+            if context_ids and explicit is None and spec and spec.operation == "search":
+                spec = None
             local_provider = (
                 local_only
+                or local_model_only
                 or self.knowledge.settings.read().get("generation_provider", "deepseek") == "local"
             )
             planner = self.local_planner if local_provider else self.planner
@@ -186,6 +195,12 @@ class QueryService:
                             "today": now.date().isoformat(),
                             "timezone": timezone,
                             "allow_answer": not local_only,
+                            "lookup_mode": lookup_mode,
+                            "current_documents": self.mirror.catalog.query(
+                                library, QuerySpec("list", limit=10), context_ids
+                            )["rows"]
+                            if context_ids
+                            else [],
                             **constraints,
                             "custom_fields": [
                                 {"field": item["field"], "type": item["type"]}
@@ -195,7 +210,7 @@ class QueryService:
                     )
                 )
                 planned = "local_model" if local_provider else "deepseek"
-                if metadata_required and spec.operation in {"search", "answer"}:
+                if metadata_required and spec.operation in {"search", "read", "answer"}:
                     raise AppError(
                         "这是统计需求，AI 计划不能改为根据检索片段生成数量。"
                         "请明确文字、标签或日期条件。",
@@ -206,6 +221,17 @@ class QueryService:
             if spec is None:
                 return None
             spec = QuerySpec.parse(spec.mapping())
+            if spec.use_context:
+                if not context_ids:
+                    return {
+                        "kind": "clarification",
+                        "sources": [],
+                        "content": "请先打开或选择当前资料，不能猜测你指的是哪份。",
+                        "notice": self._notice(planned),
+                    }
+                ids = [id for id in context_ids if not ids or id in ids]
+                if not ids:
+                    raise AppError("当前资料不在本次引用范围中。", 422, "context_scope_conflict")
             if spec.operation == "clarify":
                 return {
                     "kind": "clarification",
@@ -228,19 +254,67 @@ class QueryService:
             if spec.operation == "duplicates":
                 report("comparing")
                 return self._duplicates(library, documents, spec, ids, timezone, planned)
+            if spec.operation == "read":
+                # Read resolves a resource identity, rather than a page of excerpts.
+                spec = replace(spec, source_scope="full_document", offset=0, limit=10)
+                if spec.text_query:
+                    spec = replace(
+                        spec,
+                        where=Predicate(
+                            all=(
+                                spec.where,
+                                Predicate(
+                                    any=tuple(
+                                        Predicate(field, "contains", spec.text_query)
+                                        for field in ("title", "filename", "path")
+                                    )
+                                ),
+                            )
+                        ),
+                    )
+                report("executing")
+                self.mirror.ensure(library, documents)
+                result = self.mirror.catalog.query(library, spec, ids, timezone)
+                return {
+                    **self.reading.read(library, result["rows"], result["total"]),
+                    "query": {"plan": spec.mapping(), "planner": planned},
+                }
             report("retrieving" if spec.operation in {"search", "answer"} else "executing")
             self.mirror.ensure(library, documents)
             result = self.mirror.catalog.query(library, spec, ids, timezone)
             if spec.operation in {"search", "answer"}:
+                selected = result.pop("selected_ids", [])
+                full_scope = spec.operation == "answer" and (
+                    spec.source_scope == "full_document" or spec.use_context or len(ids) == 1
+                )
+                if full_scope:
+                    if not selected or len(selected) > 10:
+                        return {
+                            "kind": "clarification",
+                            "sources": [],
+                            "content": "请将完整资料读取范围缩小到 1–10 份。",
+                            "notice": self._notice(planned),
+                        }
+                    report("preparing")
+                    return {
+                        "kind": "answer",
+                        "sources": [self.reading.source(library, id) for id in selected],
+                        "content": "",
+                        "notice": "回答依据完整的本机资料，不是 top-k 片段。",
+                        "query": {
+                            "plan": replace(spec, source_scope="full_document").mapping(),
+                            "planner": planned,
+                        },
+                    }
                 limit = min(spec.limit, self.knowledge.settings.read()["top_k"])
                 answer_requested = (
                     explicit is None
                     and planned != "local"
                     and allow_planner
                     and not local_only
+                    and not lookup_mode
                     and local_lookup(question) is None
                 )
-                selected = result.pop("selected_ids", [])
                 if not selected:
                     hits = []
                 else:

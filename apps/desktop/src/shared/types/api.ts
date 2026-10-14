@@ -36,6 +36,7 @@ export interface LocalQueryResult {
 }
 
 export interface Source {
+  content_scope?: 'excerpt' | 'full_document'
   path?: string
   document_id: string
   filename: string
@@ -61,6 +62,9 @@ export interface HistoryMessage {
   content: string
 }
 export interface QueryOptions {
+  localGenerationOnly?: boolean
+  contextDocumentIds?: string[]
+  lookupMode?: boolean
   documentIds?: string[]
   history?: HistoryMessage[]
   queryPlan?: import('./query').QuerySpec

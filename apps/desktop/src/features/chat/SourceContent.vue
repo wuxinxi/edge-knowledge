@@ -94,12 +94,25 @@ async function copy() {
           :aria-expanded="expanded"
           @click="expanded = !expanded"
         >
-          {{ t(expanded ? '收起阅读' : '展开阅读')
+          {{
+            t(
+              expanded
+                ? '收起阅读'
+                : source.content_scope === 'full_document'
+                  ? '展开全文'
+                  : '展开阅读',
+            )
           }}<ChevronDown :size="13" :class="{ rotated: expanded }" />
         </button>
         <button type="button" class="answer-action" @click="copy">
           <Check v-if="copied" :size="13" /><Copy v-else :size="13" />{{
-            t(copied ? '已复制' : '复制片段')
+            t(
+              copied
+                ? '已复制'
+                : source.content_scope === 'full_document'
+                  ? '复制全文'
+                  : '复制片段',
+            )
           }}
         </button>
         <span v-if="error" class="message-copy-status" role="alert">{{ error }}</span>
@@ -113,7 +126,17 @@ async function copy() {
       v-if="source.text && (!image || source.ocr_status === 'ready')"
       class="source-original-text"
     >
-      <summary>{{ t(image ? '识别文字 · 本地 OCR' : '完整原文片段') }}</summary>
+      <summary>
+        {{
+          t(
+            image
+              ? '识别文字 · 本地 OCR'
+              : source.content_scope === 'full_document'
+                ? '原始全文'
+                : '原始片段',
+          )
+        }}
+      </summary>
       <p v-if="image" class="source-content-caption">
         {{ t('图表的坐标、图例和标签会被识别为文字，请结合原图阅读。') }}
       </p>
@@ -126,7 +149,13 @@ async function copy() {
       <span v-if="image && error" class="message-copy-status" role="alert">{{ error }}</span>
     </details>
     <p v-else-if="!image && !source.text" class="source-content-caption">
-      {{ t('媒体语义检索结果，请查看本地原件。') }}
+      {{
+        t(
+          source.kind === 'document' || !source.kind
+            ? '选择这篇文章以阅读全文。'
+            : '媒体语义检索结果，请查看本地原件。',
+        )
+      }}
     </p>
   </div>
 </template>

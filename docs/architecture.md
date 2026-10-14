@@ -211,3 +211,7 @@ CatalogMirror 通过 MetadataReader 和 DocumentCatalog 端口维护派生索引
 ## 聊天处理阶段
 
 ChatService 与 QueryService 通过可选标准库 Callable 报告真实阶段，应用层不依赖 SSE 或线程通信实现。API 仅在进度请求中以队列连接工作线程与 SSE，将准备阶段事件提前送达；旧客户端保留原 HTTP 错误约定。前端 ChatActivity 独立显示阶段与观察耗时，过程记录走原有会话和备份边界。未启用模型原始 reasoning 输出，不生成或伪造思考文本。
+
+## 完整资料读取与查询上下文
+
+`read` 是 QuerySpec 中的通用只读工具；`source_scope` 明确回答的证据范围，`use_context` 明确是否采用当前资料身份。QueryService 统一解析、校验和执行。应用层 DocumentReading 复用目录与原文端口，不解析特定标题或问句；KnowledgeService 在读原文前核验库归属及资料类型。Renderer 将显式引用与候选上下文分开，通过 shared/api/client 传输；使用请求级本地策略承接查找后的资料解读。上下文和完整文字通过现有会话/备份边界保存。完整流程与预算边界见 [通用资料读取与连续查询](document-query-flow.md)。

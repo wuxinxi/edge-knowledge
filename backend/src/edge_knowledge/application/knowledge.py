@@ -167,6 +167,37 @@ class KnowledgeService:
                 for hit in rank_hits(question, hits, top_k, self.settings.read()["min_score"])
             ]
 
+    def read_document(self, library: str, id: str) -> SearchHit:
+        with self._lock:
+            documents = self.repository.documents(library)
+            document = next((doc for doc in documents if doc.id == id), None)
+            if document is None:
+                raise AppError("文章已删除或不属于当前知识库。", 404, "reference_not_found")
+            if document.kind != "document":
+                raise AppError("这个入口用于阅读文字文档。", 422, "document_kind_required")
+            if not self.payloads:
+                raise AppError("没有保存完整原文，请重新导入文档。", 409, "original_missing")
+            try:
+                text = self.payloads.text(library, id)
+            except AppError as exc:
+                if exc.code != "payload_not_found":
+                    raise
+                raise AppError(
+                    "没有保存完整原文，请重新导入文档。检索片段不能代替全文。",
+                    409,
+                    "original_missing",
+                ) from exc
+            return SearchHit(
+                id,
+                document.filename,
+                text,
+                "完整原文",
+                0,
+                0,
+                path=document.source_path,
+                content_scope="full_document",
+            )
+
     def asset(self, library_id: str, document_id: str, thumbnail: bool = False) -> Asset:
         with self._lock:
             documents = self.repository.documents(library_id)

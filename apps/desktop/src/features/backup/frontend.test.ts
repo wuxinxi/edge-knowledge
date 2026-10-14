@@ -197,3 +197,32 @@ it('preserves processing activity for the answer and each historic version and r
     }),
   ).toThrow('处理过程')
 })
+
+it('preserves full document scope and all text through backup restoration and answer history', () => {
+  const source = {
+    ...conversation.messages[0]!.sources[0]!,
+    content_scope: 'full_document' as const,
+    text: '完整原文\n' + '内容。'.repeat(3000),
+  }
+  const message = {
+    ...conversation.messages[0]!,
+    sources: [source],
+    versions: [{ content: '此前回答', sources: [source], savedAt: '2026' }],
+  }
+  const backup = portableFrontend([{ ...conversation, messages: [message] }], preferenceDefaults)
+  const restored = restoredChats(backup.chats, { default: 'copy' })[0]!.messages[0]!
+  expect(restored.sources[0]!.content_scope).toBe('full_document')
+  expect(restored.sources[0]!.text).toBe(source.text)
+  expect(restored.versions![0]!.sources[0]!.content_scope).toBe('full_document')
+  expect(() =>
+    validateChatBackup({
+      version: 1,
+      sessions: [
+        {
+          ...conversation,
+          messages: [{ ...message, sources: [{ ...source, content_scope: 'partial-as-full' }] }],
+        },
+      ],
+    }),
+  ).toThrow()
+})

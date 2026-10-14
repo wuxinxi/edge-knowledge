@@ -10,6 +10,7 @@ import type { TaskRecord } from '../tasks/store'
 import TaskFeedback from '../tasks/TaskFeedback.vue'
 import ChatActivity from './ChatActivity.vue'
 import EmptySearchResult from './EmptySearchResult.vue'
+import type { Source } from '../../shared/types/api'
 const props = defineProps<{
   message: Message
   library: string
@@ -20,7 +21,12 @@ const props = defineProps<{
   canEdit?: boolean
   hasDraft?: boolean
 }>()
-const emit = defineEmits<{ retry: []; edit: [] }>()
+const emit = defineEmits<{
+  retry: []
+  edit: []
+  read: [source: Source]
+  summarize: [source: Source]
+}>()
 const { t } = useI18n()
 const copied = ref(false)
 const copyError = ref('')
@@ -170,6 +176,15 @@ async function copy() {
           :sources="message.sources"
           :library="library"
           :inline="message.mode === 'search' && message.queryPlan?.operation !== 'aggregate'"
+          :actions="
+            !generating &&
+            message.status === 'complete' &&
+            !message.error &&
+            message.resultKind !== 'catalog' &&
+            message.resultKind !== 'comparison'
+          "
+          @read="emit('read', $event)"
+          @summarize="emit('summarize', $event)"
         />
         <details v-if="message.versions?.length" class="answer-history">
           <summary>{{ t('历史回答') }} · {{ message.versions.length }}</summary>

@@ -126,6 +126,8 @@ class QuerySpec:
     clarification: str = ""
     threshold: float = 0.9
     version: int = 1
+    use_context: bool = False
+    source_scope: str = "excerpt"
 
     @classmethod
     def parse(cls, raw: object) -> "QuerySpec":
@@ -155,12 +157,25 @@ class QuerySpec:
                 "list",
                 "aggregate",
                 "search",
+                "read",
                 "answer",
                 "clarify",
                 "duplicates",
             }
         ):
             raise AppError("查询操作不支持。", 422, "invalid_query_plan")
+        if (
+            type(plan.use_context) is not bool
+            or not isinstance(plan.source_scope, str)
+            or plan.source_scope
+            not in {
+                "excerpt",
+                "full_document",
+            }
+        ):
+            raise AppError("资料范围参数无效。", 422, "invalid_query_plan")
+        if plan.operation not in {"read", "answer"} and plan.source_scope != "excerpt":
+            raise AppError("这个操作不能读取全文。", 422, "invalid_query_plan")
         if plan.metric not in {"count", "sum", "avg", "min", "max"} or not isinstance(
             plan.metric_field, str
         ):
@@ -227,7 +242,13 @@ def query_contract() -> dict:
     """Shared planner contract; the executor still validates every returned field."""
     return {
         "version": 1,
-        "operations": ["list", "aggregate", "search", "answer", "clarify", "duplicates"],
+        "operations": ["list", "aggregate", "search", "read", "answer", "clarify", "duplicates"],
+        "use_context": "boolean; use only when the question refers to current_documents",
+        "source_scope": ["excerpt", "full_document"],
+        "read": (
+            "Read complete saved text by selected IDs or title/filename/path filters; "
+            "ambiguous identity requires clarification"
+        ),
         "fields": sorted(FIELDS) + ["metadata.<flat scalar key>"],
         "kind_values": ["document", "image", "audio", "video", "bundle"],
         "where": {

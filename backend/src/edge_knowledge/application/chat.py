@@ -169,11 +169,16 @@ class ChatService:
         allow_planning: bool = False,
         timezone: str = "Asia/Shanghai",
         progress: Callable[[str], None] | None = None,
+        local_generation_only: bool = False,
+        context_document_ids: list[str] | None = None,
+        lookup_mode: bool = False,
     ) -> QueryPlan:
         report = progress or (lambda stage: None)
         report("validating")
         config = self.settings.read()
-        provider = config.get("generation_provider", "deepseek")
+        provider = (
+            "local" if local_generation_only else config.get("generation_provider", "deepseek")
+        )
         history = history or []
         if len(history) > 10 or sum(len(item.content) for item in history) > 24000:
             raise AppError("对话上下文过长，请新建对话。")
@@ -186,6 +191,9 @@ class ChatService:
                 allow_planning,
                 timezone,
                 progress=report,
+                local_model_only=local_generation_only,
+                context_ids=context_document_ids,
+                lookup_mode=lookup_mode,
             )
             if self.queries
             else None
@@ -216,7 +224,11 @@ class ChatService:
             if resolved
             else self.search(library_id, retrieval_question, top_k or config["top_k"], document_ids)
         )
-        hits = [hit for hit in hits if hit.score >= config["min_score"]]
+        hits = [
+            hit
+            for hit in hits
+            if hit.content_scope == "full_document" or hit.score >= config["min_score"]
+        ]
         if local_lookup(question):
             count = len({hit.document_id for hit in hits})
             return QueryPlan(
@@ -292,7 +304,9 @@ class ChatService:
             if hit not in usable:
                 continue
             label = "文档文字"
-            text = hit.text[:4000]
+            text = hit.text if hit.content_scope == "full_document" else hit.text[:4000]
+            if hit.content_scope == "full_document":
+                label = "完整文档原文"
             if hit.kind == "image":
                 label = "图片已附在本次请求中" if attachments else "本地 OCR 提取文字"
                 if hit.ocr_status != "ready":
@@ -301,9 +315,7 @@ class ChatService:
                 f"[{i}] 文件：{hit.filename}；依据：{label}；章节：{hit.section or '正文'}\n{text}"
             )
         prompt = (
-            "<资料>\n"
-            + "\n\n".join(sources)
-            + f"\n</资料>\n\n用户问题：{question}\n\n"
+            "<资料>\n" + "\n\n".join(sources) + f"\n</资料>\n\n用户问题：{question}\n\n"
             "回答要求：直接回答用户问题，只使用上面的资料。"
             "列举方案时合并重复方案，写清已记载的用途与区别。"
             "每个方案或事实结论后必须写支持它的资料编号，例如 [1]；"

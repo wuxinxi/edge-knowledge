@@ -213,6 +213,21 @@ async function retryMessage(id: string) {
   allowImageUpload.value = false
   await chat.retry(app.activeLibrary, id, allowed)
 }
+async function articleAction(source: import('../../shared/types/api').Source, summarize = false) {
+  if (chat.busy || chat.loading || !app.health) return
+  followLatest.value = true
+  await chat.ask(
+    app.activeLibrary,
+    summarize ? '总结这篇文章' : '查看这篇文章',
+    'search',
+    false,
+    {
+      operation: summarize ? 'answer' : 'read',
+      ...(summarize ? { source_scope: 'full_document' as const } : {}),
+    },
+    [{ id: source.document_id, filename: source.filename }],
+  )
+}
 function editQuestion(index: number) {
   const request: Message | undefined = messages.value[index - 1]
   if (
@@ -333,6 +348,8 @@ watch(
           :has-draft="!!question.length"
           @retry="retryMessage(message.id)"
           @edit="editQuestion(index)"
+          @read="articleAction($event)"
+          @summarize="articleAction($event, true)"
         />
       </div>
     </div>

@@ -250,6 +250,11 @@ export const api = {
         document_ids: options.documentIds ?? [],
         query_plan: options.queryPlan,
         allow_planning: true,
+        ...(options.localGenerationOnly ? { local_generation_only: true } : {}),
+        ...(options.contextDocumentIds?.length
+          ? { context_document_ids: options.contextDocumentIds }
+          : {}),
+        ...(options.lookupMode ? { lookup_mode: true } : {}),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         history: options.history ?? [],
       }),

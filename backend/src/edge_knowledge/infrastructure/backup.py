@@ -90,6 +90,7 @@ class ReferenceValue(StrictModel):
 
 
 class SourceValue(StrictModel):
+    content_scope: Literal["excerpt", "full_document"] | None = None
     path: str | None = Field(default=None, max_length=4096)
     document_id: str = Field(min_length=1, max_length=100)
     filename: str = Field(min_length=1, max_length=255)
@@ -159,6 +160,7 @@ class MessageValue(StrictModel):
     content: str
     sources: list[SourceValue] = Field(max_length=50)
     references: list[ReferenceValue] | None = Field(default=None, max_length=10)
+    contextReferences: list[ReferenceValue] | None = Field(default=None, max_length=10)
     mode: Literal["search", "chat"] | None = None
     error: str | None = Field(default=None, max_length=2000)
     notice: str | None = Field(default=None, max_length=4000)
@@ -177,6 +179,7 @@ class DraftValue(StrictModel):
 
 
 class ConversationValue(StrictModel):
+    contextEnabled: bool | None = None
     draft: DraftValue | None = None
     id: str = Field(min_length=1, max_length=100)
     library: str = Field(min_length=1, max_length=100)

@@ -163,7 +163,10 @@ def test_progress_stream_yields_before_blocked_preparation(system):
     gate = threading.Event()
     original = chat.prepare
 
-    def blocked(*args, progress):
+    def blocked(
+        *args, progress, local_generation_only=False, context_document_ids=None, lookup_mode=False
+    ):
+        assert local_generation_only is False
         progress("validating")
         assert gate.wait(3)
         return QueryPlan([], "", "", "", "", True, "本地结果")

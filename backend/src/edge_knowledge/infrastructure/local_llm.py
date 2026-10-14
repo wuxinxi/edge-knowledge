@@ -25,7 +25,13 @@ from edge_knowledge.infrastructure.deepseek import SYSTEM_PROMPT
 
 def local_planning_messages(question: str, context: dict) -> list:
     prompt = (
-        "只输出只读查询 JSON 计划，不直接回答。统计用 aggregate，查找原文用 search。"
+        "只输出只读查询 JSON 计划，不直接回答。统计用 aggregate，查找片段用 search，"
+        "读取完整资料用 read。"
+        "read 可以使用 text_query 标题片段，或 where 标题/文件名/路径过滤；不是向量检索。"
+        "用户指向 current_documents 时设 use_context=true；独立新主题必须 false。"
+        "针对完整资料总结、比较、翻译或问答用 answer 和 source_scope=full_document。"
+        "current_documents 是可选上下文，不是所有问题的强制范围。"
+        "lookup_mode=true 时，找资料用 search/read；只有明确要求解读时用 answer。"
         "allow_answer=true 时，知识问题、有哪些选择、解释、比较、总结都用 answer；"
         "search 只是查找资料，不会生成答案。text_query 保留核心主题和专业词，去掉问句套话，"
         "例如‘缓存实现有哪些’检索‘缓存实现’，不要只检索‘实现’或‘方案’。"
@@ -39,6 +45,11 @@ def local_planning_messages(question: str, context: dict) -> list:
         "allow_answer=false 时只查找资料，不能用 answer。禁止 SQL、文件操作、自编结果。"
     )
     definitions = {
+        "current_documents": [
+            {key: row.get(key) for key in ("title", "filename", "path")}
+            for row in context.get("current_documents", [])
+        ],
+        "lookup_mode": context.get("lookup_mode", False),
         "today": context.get("today"),
         "timezone": context.get("timezone"),
         "fields": context["contract"]["fields"],
@@ -48,6 +59,7 @@ def local_planning_messages(question: str, context: dict) -> list:
     }
     messages = [{"role": "system", "content": prompt + json.dumps(definitions, ensure_ascii=False)}]
     examples = [
+        ("打开项目部署说明全文", {"operation": "read", "text_query": "项目部署说明"}),
         (
             "统计2025年2月创建的笔记，按标签分组。",
             {
@@ -96,6 +108,13 @@ def local_planning_messages(question: str, context: dict) -> list:
             (
                 "数据库备份方式有哪些？",
                 {"operation": "answer", "text_query": "数据库备份", "where": {"all": []}},
+            )
+        )
+    if context.get("current_documents") and context.get("allow_answer", True):
+        examples.append(
+            (
+                "概括刚才的资料",
+                {"operation": "answer", "use_context": True, "source_scope": "full_document"},
             )
         )
     for q, answer in examples:
@@ -350,11 +369,13 @@ def planning_schema(context: dict) -> dict:
         "type": "object",
         "$defs": {"predicate": predicate},
         "properties": {
+            "use_context": {"type": "boolean"},
+            "source_scope": {"enum": ["excerpt", "full_document"]},
             "threshold": {"type": "number", "minimum": 0, "maximum": 1},
             "version": {"const": 1},
             "operation": {
                 "type": "string",
-                "enum": ["search", "answer", "aggregate", "list", "clarify", "duplicates"],
+                "enum": ["search", "read", "answer", "aggregate", "list", "clarify", "duplicates"],
             },
             "where": {"$ref": "#/$defs/predicate"},
             "text_query": {"type": "string"},

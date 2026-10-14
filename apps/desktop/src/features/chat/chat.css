@@ -819,3 +819,13 @@
   align-items: center;
   gap: 12px;
 }
+
+.article-followup-actions {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.article-followup-actions small {
+  color: var(--muted);
+  font-size: 11px;
+}

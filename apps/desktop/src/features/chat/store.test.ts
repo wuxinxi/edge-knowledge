@@ -587,3 +587,208 @@ it('keeps actual processing stages and duration across saving and retry history'
   setActivePinia(createPinia())
   expect(useChatStore().current('default')!.messages[1]!.processing).toEqual(answer.processing)
 })
+
+it('continues from a single local article to a local summary and retains scope on retry and reopen', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'index.md',
+    text: '# 完整文章\n末尾',
+    section: '228M SenseVoice 实战',
+    index: 0,
+    score: 0,
+    kind: 'document' as const,
+    content_scope: 'full_document' as const,
+  }
+  vi.mocked(api.localQuery).mockResolvedValue({
+    kind: 'retrieval',
+    content: '已打开文章',
+    notice: '完整原文',
+    sources: [source],
+  })
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'sources', sources: [source] }
+    yield { type: 'execution', location: 'local', generator: 'local', result_kind: 'answer' }
+    yield { type: 'delta', delta: '全文总结 [1]' }
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '帮我查看228M SenseVoice 实战', 'search')
+  setActivePinia(createPinia())
+  const reopened = useChatStore()
+  await reopened.ask('default', '总结这篇文章', 'search')
+  expect(api.localQuery).toHaveBeenCalledTimes(1)
+  expect(api.query).toHaveBeenCalledWith(
+    'default',
+    '总结这篇文章',
+    expect.any(AbortSignal),
+    false,
+    {
+      documentIds: [source.document_id],
+      history: [],
+      localGenerationOnly: true,
+      lookupMode: true,
+    },
+  )
+  const question = reopened.current('default')!.messages.at(-2)!
+  expect(question.references).toEqual([{ id: source.document_id, filename: 'index.md' }])
+  expect(reopened.current('default')!.references).toEqual([
+    { id: source.document_id, filename: 'index.md' },
+  ])
+  expect(reopened.current('default')!.messages.at(-1)!.generator).toBe('local')
+  await reopened.retry('default', reopened.current('default')!.messages.at(-1)!.id)
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.localGenerationOnly).toBe(true)
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.documentIds).toEqual([source.document_id])
+})
+
+it('passes context as a hint without narrowing a new topic and isolates new conversations', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'index.md',
+    text: '文章',
+    section: '正文',
+    index: 0,
+    score: 1,
+    kind: 'document' as const,
+  }
+  vi.mocked(api.localQuery).mockResolvedValue({
+    kind: 'retrieval',
+    content: '找到文章',
+    notice: '',
+    sources: [source],
+  })
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '找到文章', 'search')
+  await store.ask('default', '独立的新主题', 'search')
+  const options = vi.mocked(api.query).mock.calls.at(-1)![4]!
+  expect(options.documentIds).toEqual([])
+  expect(options.contextDocumentIds).toEqual([source.document_id])
+  store.create('default')
+  await store.ask('default', '总结这篇文章', 'search')
+  expect(api.query).toHaveBeenCalledTimes(1)
+  expect(vi.mocked(api.localQuery).mock.calls.at(-1)![3]).toEqual([])
+})
+
+it('keeps explicit article selection and does not guess a document from ambiguous results', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'first.md',
+    text: '片段',
+    section: '正文',
+    index: 0,
+    score: 1,
+    kind: 'document' as const,
+  }
+  vi.mocked(api.localQuery).mockResolvedValue({
+    kind: 'retrieval',
+    content: '找到两篇',
+    notice: '',
+    sources: [source, { ...source, document_id: 'b'.repeat(64), filename: 'second.md' }],
+  })
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '查找两篇文章')
+  await store.ask('default', '总结这篇文章')
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.contextDocumentIds).toHaveLength(2)
+  await store.ask('default', '总结这篇文章', 'search', false, undefined, [
+    { id: source.document_id, filename: source.filename },
+  ])
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.documentIds).toEqual([source.document_id])
+})
+
+it('opening any complete resource establishes visible references, restored on reopen and removable for a new topic', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'meeting.md',
+    text: '# 全部会议记录',
+    section: '会议纪要',
+    index: 0,
+    score: 0,
+    kind: 'document' as const,
+    content_scope: 'full_document' as const,
+  }
+  vi.mocked(api.localQuery).mockResolvedValue({
+    kind: 'retrieval',
+    content: '已读取',
+    notice: '',
+    sources: [source],
+    query: { plan: { operation: 'read' } },
+  })
+  const store = useChatStore()
+  await store.ask('default', '把会议记录展开', 'search')
+  expect(store.current('default')!.references).toEqual([
+    { id: source.document_id, filename: 'meeting.md' },
+  ])
+  setActivePinia(createPinia())
+  const reopened = useChatStore()
+  expect(reopened.current('default')!.references).toEqual(store.current('default')!.references)
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'done' }
+  })
+  await reopened.ask('default', '整理成待办清单', 'search')
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.documentIds).toEqual([source.document_id])
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.localGenerationOnly).toBe(true)
+  reopened.setReferences('default', [])
+  await reopened.ask('default', '查询另一主题', 'search')
+  expect(vi.mocked(api.localQuery).mock.calls.at(-1)![3]).toEqual([])
+})
+
+it('clearing the current resource also suppresses its old evidence hints across reload', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'note.md',
+    text: '完整资料',
+    section: '笔记',
+    index: 0,
+    score: 0,
+    kind: 'document' as const,
+    content_scope: 'full_document' as const,
+  }
+  vi.mocked(api.localQuery).mockResolvedValue({
+    kind: 'retrieval',
+    sources: [source],
+    content: '打开',
+    notice: '',
+    query: { plan: { operation: 'read' } },
+  })
+  const store = useChatStore()
+  await store.ask('default', '打开笔记')
+  store.setReferences('default', [])
+  setActivePinia(createPinia())
+  const restored = useChatStore()
+  expect(restored.current('default')!.contextEnabled).toBe(false)
+  await restored.ask('default', '全新的主题', 'search')
+  expect(api.query).not.toHaveBeenCalled()
+  expect(vi.mocked(api.localQuery).mock.calls.at(-1)![3]).toEqual([])
+})
+
+it('establishes the same working resource for natural-language reading through streaming assistant mode', async () => {
+  const source = {
+    document_id: 'a'.repeat(64),
+    filename: 'deployment.md',
+    text: '完整部署说明',
+    section: '部署',
+    index: 0,
+    score: 0,
+    kind: 'document' as const,
+    content_scope: 'full_document' as const,
+  }
+  vi.mocked(api.query).mockImplementation(async function* () {
+    yield { type: 'sources', sources: [source] }
+    yield { type: 'execution', location: 'local', result_kind: 'retrieval' }
+    yield { type: 'delta', delta: '已打开完整资料' }
+    yield { type: 'done' }
+  })
+  const store = useChatStore()
+  await store.ask('default', '自然语言请求完整资料', 'chat')
+  expect(store.current('default')!.references).toEqual([
+    { id: source.document_id, filename: source.filename },
+  ])
+  await store.ask('default', '接着整理要点', 'search')
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.documentIds).toEqual([source.document_id])
+  expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.localGenerationOnly).toBe(true)
+})

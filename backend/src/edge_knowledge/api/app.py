@@ -300,7 +300,17 @@ def create_app(
         )
         # Existing clients keep preflight HTTP errors. Opt-in clients receive preparation
         # progress immediately and any preparation failure as a terminal SSE error.
-        plan = None if body.progress else await run_in_threadpool(chat.prepare, *arguments)
+        plan = (
+            None
+            if body.progress
+            else await run_in_threadpool(
+                chat.prepare,
+                *arguments,
+                local_generation_only=body.local_generation_only,
+                context_document_ids=body.context_document_ids,
+                lookup_mode=body.lookup_mode,
+            )
+        )
 
         async def events():
             producer = None
@@ -321,7 +331,12 @@ def create_app(
                     async def prepare():
                         try:
                             return await run_in_threadpool(
-                                chat.prepare, *arguments, progress=report
+                                chat.prepare,
+                                *arguments,
+                                progress=report,
+                                local_generation_only=body.local_generation_only,
+                                context_document_ids=body.context_document_ids,
+                                lookup_mode=body.lookup_mode,
                             )
                         finally:
                             queue.put_nowait(None)

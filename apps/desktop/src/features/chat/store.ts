@@ -14,6 +14,7 @@ import type {
 export type { Conversation, Message, Reference } from '../../shared/types/conversations'
 import { useTaskStore } from '../tasks/store'
 import { updateConversationTitle } from './title'
+import { conversationDocuments } from './query-context'
 import { chatStages, stageLabels, type ChatStage } from '../../shared/types/processing'
 
 const storageKey = 'edge-assistant.chats.v1'
@@ -63,6 +64,7 @@ export const useChatStore = defineStore('chat', () => {
             typeof item.title === 'string' &&
             typeof item.updatedAt === 'string' &&
             typeof item.createdAt === 'string' &&
+            (item.contextEnabled == null || typeof item.contextEnabled === 'boolean') &&
             (item.draft == null ||
               (typeof item.draft?.content === 'string' &&
                 ['search', 'chat'].includes(item.draft.mode))) &&
@@ -290,6 +292,7 @@ export const useChatStore = defineStore('chat', () => {
   function setReferences(library: string, references: Reference[]) {
     const session = current(library) ?? create(library)
     session.references = references.slice(0, 10)
+    session.contextEnabled = references.length > 0
     persist()
   }
   function setDraft(library: string, content: string, mode: 'search' | 'chat') {
@@ -310,12 +313,19 @@ export const useChatStore = defineStore('chat', () => {
     mode: 'search' | 'chat' = 'search',
     allowImageUpload = false,
     queryPlan?: QuerySpec,
+    requestReferences?: Reference[],
   ) {
     if (loading.value || busy.value || !question.trim()) return
     const session = current(library) ?? create(library)
     const messages = session.messages
     const history = boundedHistory(messages)
-    const references = [...session.references]
+    const references = requestReferences ?? [...session.references]
+    const contextReferences =
+      queryPlan || session.contextEnabled === false
+        ? []
+        : references.length
+          ? []
+          : conversationDocuments(messages)
     if (session.draft?.content === question) delete session.draft
     session.updatedAt = new Date().toISOString()
     messages.push({
@@ -324,6 +334,7 @@ export const useChatStore = defineStore('chat', () => {
       content: question,
       sources: [],
       references,
+      ...(contextReferences.length ? { contextReferences } : {}),
       mode,
       ...(queryPlan ? { queryPlan: JSON.parse(JSON.stringify(queryPlan)) } : {}),
     })
@@ -346,7 +357,26 @@ export const useChatStore = defineStore('chat', () => {
       answer,
       allowImageUpload,
       queryPlan,
+      contextReferences,
     )
+  }
+  function bindOpenedResource(library: string, answer: Message) {
+    if (
+      answer.status !== 'complete' ||
+      answer.resultKind !== 'retrieval' ||
+      answer.sources.length !== 1 ||
+      answer.sources[0]!.content_scope !== 'full_document'
+    )
+      return
+    const source = answer.sources[0]!
+    const owner = sessions.value.find(
+      (session) =>
+        session.library === library && session.messages.some((message) => message.id === answer.id),
+    )
+    if (owner) {
+      owner.references = [{ id: source.document_id, filename: source.filename }]
+      owner.contextEnabled = true
+    }
   }
   async function runAnswer(
     library: string,
@@ -357,12 +387,17 @@ export const useChatStore = defineStore('chat', () => {
     answer: Message,
     allowImageUpload: boolean,
     queryPlan?: QuerySpec,
+    contextReferences: Reference[] = [],
   ) {
+    const localInterpretation =
+      mode === 'search' &&
+      (queryPlan?.operation === 'answer' ||
+        (!queryPlan && (contextReferences.length > 0 || references.length > 0)))
     const pending = (controller = new AbortController())
     busy.value = true
     activeAnswerId.value = answer.id
     const feedback = (taskId.value = tasks.begin(
-      mode === 'search' ? '查找资料' : '资料问答',
+      localInterpretation ? '本地文章问答' : mode === 'search' ? '查找资料' : '资料问答',
       library,
       { stop, stopLabel: '停止回答' },
     ))
@@ -374,11 +409,11 @@ export const useChatStore = defineStore('chat', () => {
     }
     answer.queryPlan = queryPlan ? JSON.parse(JSON.stringify(queryPlan)) : undefined
     answer.resultKind = undefined
-    stage(mode === 'search' ? 'querying' : 'waiting')
+    stage(mode === 'search' && !localInterpretation ? 'querying' : 'waiting')
     try {
       await persist()
       pending.signal.throwIfAborted()
-      if (mode === 'search') {
+      if (mode === 'search' && !localInterpretation) {
         const args = [
           library,
           question.trim(),
@@ -401,6 +436,7 @@ export const useChatStore = defineStore('chat', () => {
         answer.planner = result.query?.planner
         answer.queryPlan = result.query?.plan ?? answer.queryPlan
         answer.status = 'complete'
+        bindOpenedResource(library, answer)
         await persist()
         return
       }
@@ -412,6 +448,10 @@ export const useChatStore = defineStore('chat', () => {
         {
           documentIds: references.map((item) => item.id),
           history,
+          ...(localInterpretation ? { localGenerationOnly: true, lookupMode: true } : {}),
+          ...(contextReferences.length
+            ? { contextDocumentIds: contextReferences.map((item) => item.id) }
+            : {}),
           ...(queryPlan ? { queryPlan } : {}),
         },
       )) {
@@ -436,7 +476,10 @@ export const useChatStore = defineStore('chat', () => {
           answer.error = event.message
           answer.status = 'error'
         }
-        if (event.type === 'done') answer.status = 'complete'
+        if (event.type === 'done') {
+          answer.status = 'complete'
+          bindOpenedResource(library, answer)
+        }
         await persist()
         if (event.type === 'error') break
       }
@@ -509,6 +552,7 @@ export const useChatStore = defineStore('chat', () => {
       answer,
       allowImageUpload,
       question.queryPlan,
+      question.contextReferences ?? [],
     )
     if (answer.error && original.content) {
       const error = answer.error

@@ -17,6 +17,7 @@ class ReferenceBody(Strict):
 
 
 class SourceBody(Strict):
+    content_scope: Literal["excerpt", "full_document"] | None = None
     path: str | None = Field(default=None, max_length=4096)
     document_id: str = Field(min_length=1, max_length=100)
     filename: str = Field(max_length=255)
@@ -86,6 +87,7 @@ class MessageBody(Strict):
     content: str
     sources: list[SourceBody]
     references: list[ReferenceBody] | None = None
+    contextReferences: list[ReferenceBody] | None = Field(default=None, max_length=10)
     mode: Literal["search", "chat"] | None = None
     error: str | None = None
     notice: str | None = None
@@ -108,6 +110,7 @@ class DraftBody(Strict):
 
 
 class ConversationBody(Strict):
+    contextEnabled: bool | None = None
     draft: DraftBody | None = None
     id: str = Field(min_length=1, max_length=100)
     library: str = Field(min_length=1, max_length=100)

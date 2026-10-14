@@ -424,3 +424,72 @@ it('lets users read and copy long document results in place and shows paths for 
   await nextTick()
   expect(reading.classList.contains('is-clipped')).toBe(true)
 })
+
+it('labels the full original, expands every section, copies the whole text and offers a summary', async () => {
+  const text =
+    '---\ntitle: 完整文章\n---\n\n# 完整文章\n\n' +
+    '段落内容。'.repeat(260) +
+    '\n\n## 最后章节\n末尾完整原文标记'
+  const source = {
+    document_id: 'note',
+    filename: 'index.md',
+    text,
+    section: '完整文章',
+    index: 0,
+    score: 0,
+    kind: 'document' as const,
+    content_scope: 'full_document' as const,
+  }
+  await mount({
+    id: 'read',
+    role: 'assistant',
+    content: '已打开文章',
+    sources: [source],
+    mode: 'search',
+    status: 'complete',
+    resultKind: 'retrieval',
+  })
+  expect(root.textContent).toContain('文章全文')
+  expect(root.textContent).toContain('完整原文')
+  expect(root.textContent).toContain('最后章节')
+  const expand = [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+    button.textContent?.includes('展开全文'),
+  )!
+  expect(expand).toBeDefined()
+  expand.click()
+  await nextTick()
+  expect(root.querySelector('.source-excerpt-reading')?.classList.contains('is-clipped')).toBe(
+    false,
+  )
+  const copy = [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+    button.textContent?.includes('复制全文'),
+  )!
+  copy.click()
+  await nextTick()
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(text)
+  expect(root.querySelector('.article-followup-actions')?.textContent).toContain('总结这篇文章')
+  expect(root.querySelector('.article-followup-actions')?.textContent).toContain('本地模型')
+})
+
+it('offers full article reading for excerpt results while keeping the excerpt label', async () => {
+  await mount({
+    id: 'search',
+    role: 'assistant',
+    content: '找到资料',
+    sources: [
+      {
+        document_id: 'doc',
+        filename: 'index.md',
+        text: '命中片段',
+        section: '章节',
+        index: 2,
+        score: 0.8,
+      },
+    ],
+    mode: 'search',
+    status: 'complete',
+    resultKind: 'retrieval',
+  })
+  expect(root.textContent).toContain('阅读全文')
+  expect(root.textContent).not.toContain('完整原文')
+})
