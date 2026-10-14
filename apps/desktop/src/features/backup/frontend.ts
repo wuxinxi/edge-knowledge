@@ -24,6 +24,9 @@ export function validateChatBackup(value: unknown): Conversation[] {
       !string(chat.title, 80) ||
       !string(chat.createdAt, 100) ||
       !string(chat.updatedAt, 100) ||
+      (chat.draft != null &&
+        (typeof chat.draft?.content !== 'string' ||
+          !['search', 'chat'].includes(chat.draft.mode))) ||
       !Array.isArray(chat.messages) ||
       !Array.isArray(chat.references) ||
       chat.references.length > 10
@@ -210,6 +213,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
       id: chat.id,
       library: chat.library,
       title: chat.title,
+      ...(chat.draft ? { draft: { content: chat.draft.content, mode: chat.draft.mode } } : {}),
       ...(chat.titleSource === 'auto' || chat.titleSource === 'manual'
         ? { titleSource: chat.titleSource }
         : {}),

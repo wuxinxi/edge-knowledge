@@ -78,6 +78,7 @@ function confirmDelete() {
           @click="select(item.id)"
         >
           <MessageSquare :size="14" /><span>{{ item.title || t('新对话') }}</span>
+          <small v-if="item.draft?.content" class="conversation-draft">{{ t('草稿') }}</small>
         </button>
         <button
           class="icon-button conversation-more"

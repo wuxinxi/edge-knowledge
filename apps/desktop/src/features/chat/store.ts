@@ -63,6 +63,9 @@ export const useChatStore = defineStore('chat', () => {
             typeof item.title === 'string' &&
             typeof item.updatedAt === 'string' &&
             typeof item.createdAt === 'string' &&
+            (item.draft == null ||
+              (typeof item.draft?.content === 'string' &&
+                ['search', 'chat'].includes(item.draft.mode))) &&
             Array.isArray(item.messages) &&
             Array.isArray(item.references) &&
             item.references.every(
@@ -289,6 +292,18 @@ export const useChatStore = defineStore('chat', () => {
     session.references = references.slice(0, 10)
     persist()
   }
+  function setDraft(library: string, content: string, mode: 'search' | 'chat') {
+    if (loading.value) return
+    const active = current(library)
+    if (!active && !content) return
+    const session = active ?? create(library)
+    if (session.draft?.content === content && session.draft?.mode === mode) return
+    if (content) session.draft = { content, mode }
+    else delete session.draft
+    // Use the existing revision-protected local transcript persistence. Drafts
+    // never enter the model context or carry per-request upload permission.
+    void persist().catch(() => {})
+  }
   async function ask(
     library: string,
     question: string,
@@ -301,6 +316,7 @@ export const useChatStore = defineStore('chat', () => {
     const messages = session.messages
     const history = boundedHistory(messages)
     const references = [...session.references]
+    if (session.draft?.content === question) delete session.draft
     session.updatedAt = new Date().toISOString()
     messages.push({
       id: crypto.randomUUID(),
@@ -541,6 +557,7 @@ export const useChatStore = defineStore('chat', () => {
     remove,
     undoDelete,
     setReferences,
+    setDraft,
     ask,
     retry,
     stop,

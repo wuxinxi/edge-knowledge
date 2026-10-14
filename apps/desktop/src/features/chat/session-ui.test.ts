@@ -32,6 +32,10 @@ vi.mock('../../shared/api/client', () => ({
 let cleanup = () => {}
 beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value: vi.fn(),
+  })
   vi.stubGlobal('localStorage', memoryStorage())
   vi.stubGlobal(
     'matchMedia',
@@ -167,4 +171,44 @@ it('keeps the first request running when sending directly from a home page with 
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(store.current('default')!.messages.at(-1)?.status).toBe('complete')
   expect(store.activeTask?.state).toBe('success')
+})
+
+it('restores unfinished questions and their modes after switching chats and leaving the page', async () => {
+  const { root, store, router } = await mountShell(true)
+  await store.ask('default', '第一段对话', 'search')
+  const first = store.current('default')!
+  let input = root.querySelector<HTMLTextAreaElement>('.composer textarea')!
+  const write = async (value: string) => {
+    input.value = value
+    input.dispatchEvent(new Event('input'))
+    await nextTick()
+  }
+  root.querySelector<HTMLButtonElement>('.mode-selector button')!.click()
+  await write('  继续查找\n还没写完  ')
+  expect(root.querySelector('.conversation-draft')?.textContent).toBe('草稿')
+  const second = store.create('default')
+  await nextTick()
+  expect(input.value).toBe('')
+  await write('第二个未发送问题')
+  store.select('default', first.id)
+  await nextTick()
+  expect(input.value).toBe('  继续查找\n还没写完  ')
+  expect(root.querySelector('.mode-selector button')?.getAttribute('aria-pressed')).toBe('true')
+  await router.push('/library')
+  await nextTick()
+  await router.push('/')
+  await nextTick()
+  input = root.querySelector<HTMLTextAreaElement>('.composer textarea')!
+  expect(input.value).toBe('  继续查找\n还没写完  ')
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(input.value).toBe('')
+  expect(first.messages.at(-2)?.content).toBe('  继续查找\n还没写完  ')
+  expect(second.draft?.content).toBe('第二个未发送问题')
+  await write('/new')
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(store.current('default')!.id).toBe(second.id)
+  expect(input.value).toBe('第二个未发送问题')
+  expect(first.draft).toBeUndefined()
 })

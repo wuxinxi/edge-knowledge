@@ -165,7 +165,13 @@ class MessageValue(StrictModel):
     comparisons: list[ComparisonValue] | None = Field(default=None, max_length=50)
 
 
+class DraftValue(StrictModel):
+    content: str
+    mode: Literal["search", "chat"]
+
+
 class ConversationValue(StrictModel):
+    draft: DraftValue | None = None
     id: str = Field(min_length=1, max_length=100)
     library: str = Field(min_length=1, max_length=100)
     title: str = Field(max_length=80)

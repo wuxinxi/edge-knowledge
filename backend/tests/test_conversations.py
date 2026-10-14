@@ -71,6 +71,26 @@ def test_stale_writer_cannot_replace_more_recent_transcript(tmp_path):
     assert error.value.code == "chat_conflict" and store.read()["sessions"] == value["sessions"]
 
 
+def test_api_preserves_draft_on_reopen_and_rejects_upload_permission(system, tmp_path):
+    _, knowledge, chat, *_ = system
+    path = tmp_path / "draft.sqlite3"
+    service = ConversationService(SQLiteConversationStore(path))
+    app = create_app(knowledge, chat, "test-token", conversations=service)
+    state = snapshot()
+    draft = {"content": "  还没写完\n\n下一段  ", "mode": "search"}
+    state["sessions"][0]["draft"] = draft
+    with TestClient(app) as client:
+        client.headers["Authorization"] = "Bearer test-token"
+        assert client.post("/api/chat-state", json={**state, "revision": 0}).status_code == 200
+        assert SQLiteConversationStore(path).read()["sessions"][0]["draft"] == draft
+        draft["allowImageUpload"] = True
+        assert client.post("/api/chat-state", json={**state, "revision": 1}).status_code == 422
+        assert client.get("/api/chat-state").json()["sessions"][0]["draft"] == {
+            "content": "  还没写完\n\n下一段  ",
+            "mode": "search",
+        }
+
+
 def test_api_authentication_validation_and_lossless_fields(system, tmp_path):
     _, knowledge, chat, *_ = system
     service = ConversationService(SQLiteConversationStore(tmp_path / "state.sqlite3"))

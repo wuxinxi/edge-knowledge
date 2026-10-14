@@ -239,8 +239,15 @@ async function pick(index: number) {
     }
     emit('references', [...props.references, { id: item.id, filename: item.label }])
   } else if (item.id === 'new') {
+    // Remove the command from its original draft before navigation. A reused
+    // empty conversation may already have an unfinished question of its own.
+    emit('update:modelValue', remaining)
     emit('new')
-    remaining = ''
+    trigger.value = ''
+    error.value = ''
+    await nextTick()
+    input.value?.focus()
+    return
   } else if (item.id === 'reference') {
     emit('update:modelValue', remaining)
     trigger.value = ''

@@ -37,6 +37,68 @@ it('local search shows evidence without calling cloud generation', async () => {
   expect(store.busy).toBe(false)
 })
 
+it('keeps exact drafts and modes isolated by conversation and library after reopening', async () => {
+  vi.mocked(api.localQuery).mockResolvedValue({ content: '结果', sources: [], notice: '' })
+  const store = useChatStore()
+  await store.ask('default', '已发送的问题')
+  const first = store.current('default')!
+  const content = '  未发送的追问\n\n保留空白  '
+  store.setDraft('default', content, 'search')
+  const second = store.create('default')
+  store.setDraft('default', '另一个话题', 'chat')
+  store.setDraft('other-library', '另一资料库', 'search')
+  store.select('default', first.id)
+  expect(store.current('default')!.draft).toEqual({ content, mode: 'search' })
+  expect(second.draft).toEqual({ content: '另一个话题', mode: 'chat' })
+  setActivePinia(createPinia())
+  const restored = useChatStore()
+  expect(restored.current('default')!.draft).toEqual({ content, mode: 'search' })
+  expect(restored.current('other-library')!.draft?.content).toBe('另一资料库')
+  restored.remove(first.id)
+  restored.undoDelete()
+  expect(restored.current('default')!.draft?.content).toBe(content)
+  expect(api.localQuery).toHaveBeenCalledTimes(1)
+  expect(api.query).not.toHaveBeenCalled()
+})
+
+it('clears only the submitted draft and preserves drafts when local tools run', async () => {
+  vi.mocked(api.localQuery).mockResolvedValue({ content: '结果', sources: [], notice: '' })
+  const store = useChatStore()
+  store.setDraft('default', '  写一半的问题\n', 'chat')
+  await store.ask('default', '检查重复', 'search', false, { operation: 'duplicates' })
+  expect(store.current('default')!.draft?.content).toBe('  写一半的问题\n')
+  await store.ask('default', '  写一半的问题\n', 'search')
+  expect(store.current('default')!.draft).toBeUndefined()
+  expect(store.current('default')!.messages.at(-2)!.content).toBe('  写一半的问题\n')
+  expect(vi.mocked(api.localQuery).mock.calls.at(-1)![1]).toBe('写一半的问题')
+  setActivePinia(createPinia())
+  expect(useChatStore().current('default')!.draft).toBeUndefined()
+})
+
+it('stores drafts in the durable snapshot and restores them without browser cache', async () => {
+  vi.mocked(api.loadChatState).mockResolvedValue({
+    version: 1,
+    initialized: false,
+    revision: 0,
+    sessions: [],
+    active: {},
+  })
+  let revision = 0
+  vi.mocked(api.saveChatState).mockImplementation(async () => ({ revision: ++revision }))
+  const store = useChatStore()
+  await store.initialize()
+  store.setDraft('default', '本地未发送草稿', 'search')
+  await store.flush()
+  const saved = vi.mocked(api.saveChatState).mock.calls.at(-1)![0]
+  vi.mocked(api.loadChatState).mockResolvedValue({ ...saved, revision, initialized: true })
+  localStorage.clear()
+  setActivePinia(createPinia())
+  const restored = useChatStore()
+  await restored.initialize()
+  expect(restored.current('default')!.draft).toEqual({ content: '本地未发送草稿', mode: 'search' })
+  expect(restored.current('default')!.messages).toEqual([])
+})
+
 it('persists the full local statistics answer rather than replacing it with the preview count', async () => {
   const content = '2026 年 9 月匹配 **23 篇**。仅预览前 20 份依据。'
   vi.mocked(api.localQuery).mockResolvedValue({ content, sources: [], notice: '不调用 DeepSeek' })

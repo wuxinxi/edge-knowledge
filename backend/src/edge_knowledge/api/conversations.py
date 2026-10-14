@@ -96,7 +96,13 @@ class MessageBody(Strict):
         return QuerySpec.parse(value).mapping() if value is not None else None
 
 
+class DraftBody(Strict):
+    content: str
+    mode: Literal["search", "chat"]
+
+
 class ConversationBody(Strict):
+    draft: DraftBody | None = None
     id: str = Field(min_length=1, max_length=100)
     library: str = Field(min_length=1, max_length=100)
     title: str = Field(max_length=80)

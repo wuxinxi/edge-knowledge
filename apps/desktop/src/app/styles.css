@@ -994,6 +994,12 @@ summary:focus-visible {
   white-space: nowrap;
   overflow: hidden;
 }
+.conversation-draft {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: var(--text-caption);
+  color: var(--muted);
+}
 .conversation-item.active .conversation-select {
   color: var(--text);
 }

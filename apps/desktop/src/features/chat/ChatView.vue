@@ -25,8 +25,19 @@ import './chat.css'
 const app = useAppStore()
 const { t, preferences, libraryName } = useI18n()
 const chat = useChatStore()
-const question = ref('')
-const mode = ref<'search' | 'chat'>('chat')
+const conversation = computed(() => chat.current(app.activeLibrary))
+const fallbackMode = ref<'search' | 'chat'>('chat')
+const question = computed<string>({
+  get: () => conversation.value?.draft?.content ?? '',
+  set: (value: string) => chat.setDraft(app.activeLibrary, value, mode.value),
+})
+const mode = computed<'search' | 'chat'>({
+  get: () => conversation.value?.draft?.mode ?? fallbackMode.value,
+  set: (value: 'search' | 'chat') => {
+    fallbackMode.value = value
+    if (conversation.value?.draft) chat.setDraft(app.activeLibrary, question.value, value)
+  },
+})
 const localModel = computed(() => app.capabilities?.generator.provider !== 'deepseek')
 const allowImageUpload = ref(false)
 const cloudVision = computed(
@@ -71,7 +82,6 @@ function scrollLatest(behavior: ScrollBehavior = 'smooth') {
     })
 }
 const composerInput = ref<InstanceType<typeof ComposerInput>>()
-const conversation = computed(() => chat.current(app.activeLibrary))
 const messages = computed(() => conversation.value?.messages ?? [])
 const references = computed(() => conversation.value?.references ?? [])
 // The /new command remains available without duplicating visible navigation.
@@ -83,9 +93,9 @@ function checkDuplicates() {
   })
 }
 function newChat() {
+  if (chat.loading) return
   if (conversation.value && !messages.value.length) return
   chat.create(app.activeLibrary)
-  question.value = ''
   allowImageUpload.value = false
 }
 function exportCompleteChat() {
@@ -165,9 +175,8 @@ const examples = computed(() => [
 ])
 
 async function send(value = question.value) {
-  if (!value.trim() || chat.busy || !app.health) return
+  if (!value.trim() || chat.busy || chat.loading || !app.health) return
   followLatest.value = true
-  question.value = ''
   const allowed = allowImageUpload.value
   allowImageUpload.value = false
   await chat.ask(app.activeLibrary, value, mode.value, allowed)
@@ -178,7 +187,7 @@ async function retryMessage(id: string) {
   await chat.retry(app.activeLibrary, id, allowed)
 }
 async function executeLocalQuery(plan: QuerySpec, label: string) {
-  if (chat.busy || !app.health) return
+  if (chat.busy || chat.loading || !app.health) return
   followLatest.value = true
   allowImageUpload.value = false
   await chat.ask(app.activeLibrary, label, 'search', false, plan)
@@ -196,7 +205,7 @@ watch(
     if (!conversation.value?.messages.some((message) => message.id === chat.activeAnswerId))
       chat.stop()
     followLatest.value = true
-    question.value = ''
+    fallbackMode.value = 'chat'
     allowImageUpload.value = false
   },
 )
@@ -281,7 +290,7 @@ watch(
               type="button"
               :aria-pressed="mode === 'search'"
               :class="{ selected: mode === 'search' }"
-              :disabled="chat.busy"
+              :disabled="chat.busy || chat.loading"
               @click="mode = 'search'"
             >
               <Search :size="13" />{{ t('查找资料') }}
@@ -290,15 +299,15 @@ watch(
               type="button"
               :aria-pressed="mode === 'chat'"
               :class="{ selected: mode === 'chat' }"
-              :disabled="chat.busy"
+              :disabled="chat.busy || chat.loading"
               @click="mode = 'chat'"
             >
               <Sparkles :size="13" />{{ t(localModel ? '本地助手' : 'DeepSeek 解读') }}
             </button>
           </div>
-          <ChatMenu :label="t('资料工具')" :disabled="chat.busy || !app.health">
+          <ChatMenu :label="t('资料工具')" :disabled="chat.busy || chat.loading || !app.health">
             <QueryBuilder
-              :disabled="chat.busy || !app.health"
+              :disabled="chat.busy || chat.loading || !app.health"
               :scope-label="
                 references.length
                   ? `${references.length} ${t('份引用资料')}`
@@ -306,7 +315,11 @@ watch(
               "
               @execute="executeLocalQuery"
             />
-            <button type="button" :disabled="chat.busy || !app.health" @click="checkDuplicates">
+            <button
+              type="button"
+              :disabled="chat.busy || chat.loading || !app.health"
+              @click="checkDuplicates"
+            >
               <Copy :size="13" />{{ t('检查重复') }}
             </button>
           </ChatMenu>
@@ -317,7 +330,7 @@ watch(
           :library="app.activeLibrary"
           :references="references"
           :mode="mode"
-          :disabled="!app.health"
+          :disabled="!app.health || chat.loading"
           :busy="chat.busy"
           :can-create-conversation="!!messages.length"
           @references="chat.setReferences(app.activeLibrary, $event)"
@@ -355,7 +368,7 @@ watch(
           ><button
             v-else
             class="send-button"
-            :disabled="!question.trim() || !app.health"
+            :disabled="!question.trim() || !app.health || chat.loading"
             :aria-label="t('发送问题')"
           >
             <ArrowUp :size="20" />
@@ -383,7 +396,7 @@ watch(
         v-for="example in examples"
         :key="example.title"
         class="starter-action"
-        :disabled="!app.health || chat.busy"
+        :disabled="!app.health || chat.busy || chat.loading"
         @click="useExample(example)"
       >
         <span class="starter-icon"><component :is="example.icon" :size="17" /></span

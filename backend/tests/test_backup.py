@@ -215,6 +215,27 @@ def test_frontend_rejects_credential_and_permission_fields(backups):
         service.export({"preferences": {"local_access": "outside"}})
 
 
+def test_unsent_chat_draft_survives_backup_restore(backups):
+    _, _, service = backups
+    draft = {"content": "  待续的问题\n\n保留空白  ", "mode": "search"}
+    chat = {
+        "id": "draft-chat",
+        "library": "default",
+        "title": "",
+        "createdAt": "2026-10-14",
+        "updatedAt": "2026-10-14",
+        "messages": [],
+        "references": [],
+        "draft": draft,
+    }
+    frontend = {"chats": {"version": 1, "sessions": [chat], "active": {"default": chat["id"]}}}
+    result = service.restore(service.export(frontend))
+    assert result["frontend"]["chats"]["sessions"][0]["draft"] == draft
+    draft["allowImageUpload"] = True
+    with pytest.raises(AppError):
+        service.export(frontend)
+
+
 def test_duplicate_zip_entries_and_excessive_expansion_are_rejected(backups, monkeypatch):
     _, _, service = backups
     data = service.export({})

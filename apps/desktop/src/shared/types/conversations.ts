@@ -32,6 +32,7 @@ export interface Message {
   comparisons?: DuplicateComparison[]
 }
 export interface Conversation {
+  draft?: { content: string; mode: 'search' | 'chat' }
   id: string
   library: string
   title: string

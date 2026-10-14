@@ -28,6 +28,26 @@ const conversation = {
   ],
 }
 describe('portable conversation backups', () => {
+  it('preserves unsent drafts without including upload permission and rejects malformed drafts', () => {
+    const draft = {
+      content: '  完整草稿\n\n结尾  ',
+      mode: 'search' as const,
+      allowImageUpload: true,
+    }
+    const backup = portableFrontend([{ ...conversation, draft }], preferenceDefaults)
+    const restored = restoredChats(backup.chats, { default: 'copy' })[0]!
+    expect(restored.draft).toEqual({ content: draft.content, mode: 'search' })
+    expect(JSON.stringify(backup)).not.toContain('allowImageUpload')
+    expect(
+      validateChatBackup({ version: 1, sessions: [{ ...conversation, draft: null }] })[0]!.draft,
+    ).toBeUndefined()
+    expect(() =>
+      validateChatBackup({
+        version: 1,
+        sessions: [{ ...conversation, draft: { content: 1, mode: 'chat' } }],
+      }),
+    ).toThrow()
+  })
   it('remaps restored conversations without replacing existing identifiers', () => {
     const restored = restoredChats(
       { version: 1, sessions: [conversation] },

@@ -253,6 +253,7 @@ const english: Record<string, string> = {
   已停止: 'Stopped',
   准备中: 'Preparing',
   处理中: 'Processing',
+  草稿: 'Draft',
   分析资料: 'Analyzing files',
   '正在本地分析选定资料，首次加载模型可能较慢。':
     'Analyzing selected files locally. The model may take longer on first use.',
