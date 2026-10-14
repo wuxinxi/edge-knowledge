@@ -9,6 +9,7 @@ import { useLayoutStore } from '../../app/layout'
 import { useChatStore } from './store'
 import { memoryStorage } from '../../shared/preferences/test-storage'
 import { api } from '../../shared/api/client'
+import type { SavedChatState } from '../../shared/types/conversations'
 
 vi.mock('../../app/store', () => ({
   useAppStore: () => ({ activeLibrary: 'default', libraries: [], health: {}, initialize: vi.fn() }),
@@ -51,6 +52,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 async function mountShell(withChat = false) {
@@ -76,6 +78,140 @@ async function mountShell(withChat = false) {
   await new Promise((resolve) => setTimeout(resolve, 0))
   return { root, store, layout, router }
 }
+
+it.each(['chat', 'search'] as const)(
+  'opens a cached %s conversation at the bottom when durable restoration has identical content',
+  async (mode) => {
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2000)
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(500)
+    const session = {
+      id: 'restored-chat',
+      library: 'default',
+      title: '保存的对话',
+      createdAt: '2026',
+      updatedAt: '2026',
+      references: [],
+      messages: [
+        { id: 'q', role: 'user', content: '保存的问题', mode, sources: [] },
+        {
+          id: 'a',
+          role: 'assistant',
+          content: '保存的回答\n'.repeat(80),
+          mode,
+          status: 'complete',
+          resultKind: 'retrieval',
+          sources:
+            mode === 'search'
+              ? [
+                  {
+                    document_id: 'note',
+                    filename: 'note.md',
+                    text: '原文片段',
+                    section: '正文',
+                    index: 0,
+                    score: 0.8,
+                  },
+                ]
+              : [],
+        },
+      ],
+    }
+    const snapshot = { version: 1 as const, sessions: [session], active: { default: session.id } }
+    localStorage.setItem('edge-assistant.chats.v1', JSON.stringify(snapshot))
+    vi.mocked(api.loadChatState).mockResolvedValueOnce({
+      ...snapshot,
+      initialized: true,
+      revision: 1,
+    } as Awaited<ReturnType<typeof api.loadChatState>>)
+    const { root } = await mountShell(true)
+    await nextTick()
+    const scroller = root.querySelector<HTMLElement>('.chat-scroll')!
+    expect(scroller.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: 'instant' })
+  },
+)
+
+function savedScrollState(): SavedChatState {
+  return {
+    version: 1,
+    initialized: true,
+    revision: 1,
+    active: { default: 'saved' },
+    sessions: [
+      {
+        id: 'saved',
+        library: 'default',
+        title: '保存的主题',
+        createdAt: '2026',
+        updatedAt: '2026',
+        references: [],
+        messages: [
+          { id: 'q', role: 'user', mode: 'chat', content: '保存的问题', sources: [] },
+          {
+            id: 'a',
+            role: 'assistant',
+            mode: 'chat',
+            status: 'complete',
+            content: '完整回答\n'.repeat(80),
+            sources: [],
+          },
+        ],
+      },
+    ],
+  }
+}
+it('positions a conversation loaded asynchronously from local storage after the initial empty render', async () => {
+  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2000)
+  let restore!: (value: SavedChatState) => void
+  vi.mocked(api.loadChatState).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        restore = resolve
+      }),
+  )
+  const { root, store } = await mountShell(true)
+  expect(store.loading).toBe(true)
+  expect(root.querySelector('.loading-screen')).not.toBeNull()
+  restore(savedScrollState())
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await nextTick()
+  const scroller = root.querySelector<HTMLElement>('.chat-scroll')!
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: 'instant' })
+})
+it('positions on switching equal-content conversations and returning to the chat page', async () => {
+  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2000)
+  const state = savedScrollState()
+  state.sessions.push({ ...state.sessions[0]!, id: 'second' })
+  vi.mocked(api.loadChatState).mockResolvedValueOnce(state)
+  const { root, store, router } = await mountShell(true)
+  const scroller = root.querySelector<HTMLElement>('.chat-scroll')!
+  vi.mocked(scroller.scrollTo).mockClear()
+  store.select('default', 'second')
+  await nextTick()
+  await nextTick()
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: 'instant' })
+  await router.push('/library')
+  vi.mocked(scroller.scrollTo).mockClear()
+  await router.push('/')
+  await nextTick()
+  await nextTick()
+  const reopened = root.querySelector<HTMLElement>('.chat-scroll')!
+  expect(reopened.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: 'instant' })
+})
+it('does not override a reading gesture while conversation positioning is queued', async () => {
+  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2000)
+  const state = savedScrollState()
+  state.sessions.push({ ...state.sessions[0]!, id: 'second' })
+  vi.mocked(api.loadChatState).mockResolvedValueOnce(state)
+  const { root, store } = await mountShell(true)
+  const scroller = root.querySelector<HTMLElement>('.chat-scroll')!
+  vi.mocked(scroller.scrollTo).mockClear()
+  store.select('default', 'second')
+  await nextTick()
+  scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -24, bubbles: true }))
+  await nextTick()
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+  expect(root.querySelector('.jump-to-latest')).not.toBeNull()
+})
 it('creates a conversation after deleting the last one and prevents duplicate drafts from both entry points', async () => {
   const { root, store } = await mountShell()
   const session = store.create('default')

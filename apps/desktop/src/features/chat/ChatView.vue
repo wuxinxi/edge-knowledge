@@ -90,14 +90,17 @@ function trackScroll() {
     lastScrollTop = node.scrollTop
   }
 }
-function scrollLatest(behavior: ScrollBehavior = 'instant') {
+function scrollLatest(
+  behavior: ScrollBehavior = 'instant',
+  alignment: 'bottom' | 'response' = 'bottom',
+) {
   followLatest.value = true
   const node = scroller.value,
     responseTop = latestResponseTop()
   if (node) {
     node.scrollTo({
       top:
-        localResultAtTop() && responseTop !== undefined
+        alignment === 'response' && localResultAtTop() && responseTop !== undefined
           ? Math.max(0, node.scrollTop + responseTop - 16)
           : node.scrollHeight,
       behavior,
@@ -284,8 +287,27 @@ watch(
       .join(''),
   async () => {
     await nextTick()
-    if (followLatest.value) scrollLatest('instant')
+    if (followLatest.value && !chat.loading)
+      scrollLatest('instant', chat.busy ? 'response' : 'bottom')
   },
+)
+let restoreRevision = 0
+watch(
+  () => [app.activeLibrary, conversation.value?.id, chat.loading],
+  async () => {
+    const revision = ++restoreRevision
+    await nextTick()
+    // Opening is a view lifecycle event, even if the restored text is identical
+    // to the browser cache or another conversation. Do not override a reading gesture.
+    if (
+      revision === restoreRevision &&
+      !chat.loading &&
+      followLatest.value &&
+      messages.value.length
+    )
+      scrollLatest('instant', 'bottom')
+  },
+  { immediate: true },
 )
 </script>
 
