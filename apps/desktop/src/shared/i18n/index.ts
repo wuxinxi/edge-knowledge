@@ -268,6 +268,7 @@ const english: Record<string, string> = {
   '输入框已有草稿，可以直接继续修改。':
     'A draft is already in the composer. You can continue editing it there.',
   需要补充条件: 'More details needed',
+  对话内容: 'Conversation content',
   分析资料: 'Analyzing files',
   '正在本地分析选定资料，首次加载模型可能较慢。':
     'Analyzing selected files locally. The model may take longer on first use.',

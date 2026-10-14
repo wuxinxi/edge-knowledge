@@ -260,3 +260,104 @@ it('retains the chosen lookup mode after the first draft is sent and restored af
   await nextTick()
   expect(root.querySelector('.mode-selector button')?.getAttribute('aria-pressed')).toBe('true')
 })
+
+async function mountStreamingReader() {
+  const { root, store } = await mountShell(true)
+  const session = store.create('default')
+  session.messages.push(
+    { id: 'question', role: 'user', mode: 'chat', content: '请详细说明部署流程', sources: [] },
+    {
+      id: 'streaming',
+      role: 'assistant',
+      mode: 'chat',
+      content: '正在输出的回答',
+      sources: [],
+      status: 'streaming',
+    },
+  )
+  store.busy = true
+  await nextTick()
+  await nextTick()
+  const scroller = root.querySelector<HTMLElement>('.chat-scroll')!
+  Object.defineProperties(scroller, {
+    scrollHeight: { configurable: true, value: 2000 },
+    clientHeight: { configurable: true, value: 500 },
+  })
+  scroller.scrollTop = 1500
+  scroller.dispatchEvent(new Event('scroll'))
+  vi.mocked(scroller.scrollTo).mockClear()
+  return { root, store, session, scroller }
+}
+it.each([24, 120])(
+  'does not pull a reader back after scrolling up %i pixels while streaming',
+  async (distance) => {
+    const { root, session, scroller } = await mountStreamingReader()
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -distance, bubbles: true }))
+    scroller.scrollTop = 1500 - distance
+    scroller.dispatchEvent(new Event('scroll'))
+    session.messages[1]!.content += '\n新收到的一段内容'
+    await nextTick()
+    await nextTick()
+    expect(scroller.scrollTo).not.toHaveBeenCalled()
+    expect(scroller.scrollTop).toBe(1500 - distance)
+    expect(root.querySelector('.jump-to-latest')).not.toBeNull()
+    session.messages[1]!.status = 'complete'
+    await nextTick()
+    await nextTick()
+    expect(scroller.scrollTo).not.toHaveBeenCalled()
+    root.querySelector<HTMLButtonElement>('.jump-to-latest')!.click()
+    await nextTick()
+    expect(scroller.scrollTo).toHaveBeenCalledOnce()
+    expect(root.querySelector('.jump-to-latest')).toBeNull()
+    session.messages[1]!.content += '\n继续收到内容'
+    await nextTick()
+    await nextTick()
+    expect(scroller.scrollTo).toHaveBeenCalledTimes(2)
+  },
+)
+
+it('pauses before the scroll event and ignores a late programmatic scroll near the bottom', async () => {
+  const { root, session, scroller } = await mountStreamingReader()
+  scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }))
+  session.messages[1]!.content += '\n与滚动同时到达的内容'
+  await nextTick()
+  await nextTick()
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+  // An already queued browser scroll event must not undo the user's pause.
+  scroller.dispatchEvent(new Event('scroll'))
+  session.messages[1]!.content += '\n又一段内容'
+  await nextTick()
+  await nextTick()
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+  expect(root.querySelector('.jump-to-latest')).not.toBeNull()
+})
+
+it.each(['scrollbar', 'pointer', 'keyboard', 'touch'])(
+  'respects %s reading during a streamed answer',
+  async (input) => {
+    const { session, scroller } = await mountStreamingReader()
+    if (input === 'scrollbar') {
+      scroller.scrollTop -= 8
+      scroller.dispatchEvent(new Event('scroll'))
+    }
+    if (input === 'pointer') scroller.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    if (input === 'keyboard')
+      scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }))
+    if (input === 'touch') scroller.dispatchEvent(new Event('touchmove', { bubbles: true }))
+    session.messages[1]!.content += '\n新增内容'
+    await nextTick()
+    await nextTick()
+    expect(scroller.scrollTo).not.toHaveBeenCalled()
+  },
+)
+
+it('continues following streamed updates when the reader has not interacted', async () => {
+  const { session, scroller } = await mountStreamingReader()
+  for (const part of ['第一段新增内容', '第二段新增内容']) {
+    session.messages[1]!.content += part
+    await nextTick()
+    await nextTick()
+    scroller.dispatchEvent(new Event('scroll'))
+  }
+  expect(scroller.scrollTo).toHaveBeenCalledTimes(2)
+})

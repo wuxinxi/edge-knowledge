@@ -49,6 +49,19 @@ const cloudVision = computed(
 )
 const scroller = ref<HTMLElement>()
 const followLatest = ref(true)
+let lastScrollTop = 0
+function pauseFollowing() {
+  followLatest.value = false
+}
+function scrollWheel(event: WheelEvent) {
+  if (event.deltaY < 0) pauseFollowing()
+}
+function scrollKey(event: KeyboardEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('input, textarea, select, [contenteditable="true"]')) return
+  if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey))
+    pauseFollowing()
+}
 function localResultAtTop() {
   const last = messages.value.at(-1)
   return last?.mode === 'search' && last.status === 'complete' && last.sources.length > 0
@@ -63,17 +76,24 @@ function latestResponseTop() {
 function trackScroll() {
   const node = scroller.value
   const top = latestResponseTop()
-  if (node)
-    followLatest.value = followsLatest(
-      node.scrollHeight - node.scrollTop - node.clientHeight,
-      localResultAtTop() ? top : undefined,
-    )
+  if (node) {
+    // Position can turn following off, never back on. In particular a queued
+    // programmatic scroll must not undo a wheel/drag/key reading gesture.
+    if (followLatest.value)
+      followLatest.value =
+        node.scrollTop >= lastScrollTop - 0.5 &&
+        followsLatest(
+          node.scrollHeight - node.scrollTop - node.clientHeight,
+          localResultAtTop() ? top : undefined,
+        )
+    lastScrollTop = node.scrollTop
+  }
 }
-function scrollLatest(behavior: ScrollBehavior = 'smooth') {
+function scrollLatest(behavior: ScrollBehavior = 'instant') {
   followLatest.value = true
   const node = scroller.value,
     responseTop = latestResponseTop()
-  if (node)
+  if (node) {
     node.scrollTo({
       top:
         localResultAtTop() && responseTop !== undefined
@@ -81,12 +101,15 @@ function scrollLatest(behavior: ScrollBehavior = 'smooth') {
           : node.scrollHeight,
       behavior,
     })
+    lastScrollTop = node.scrollTop
+  }
 }
 const composerInput = ref<InstanceType<typeof ComposerInput>>()
 const messages = computed(() => conversation.value?.messages ?? [])
 const references = computed(() => conversation.value?.references ?? [])
 // The /new command remains available without duplicating visible navigation.
 function checkDuplicates() {
+  followLatest.value = true
   void chat.ask(app.activeLibrary, t('检查当前资料范围的重复笔记'), 'search', false, {
     version: 1,
     operation: 'duplicates',
@@ -185,6 +208,7 @@ async function send(value = question.value) {
   await chat.ask(app.activeLibrary, value, requestedMode, allowed)
 }
 async function retryMessage(id: string) {
+  followLatest.value = true
   const allowed = allowImageUpload.value && cloudVision.value
   allowImageUpload.value = false
   await chat.retry(app.activeLibrary, id, allowed)
@@ -270,7 +294,18 @@ watch(
         </ChatMenu>
       </div>
     </header>
-    <div ref="scroller" class="chat-scroll" @scroll="trackScroll">
+    <div
+      ref="scroller"
+      class="chat-scroll"
+      role="region"
+      tabindex="0"
+      :aria-label="t('对话内容')"
+      @scroll="trackScroll"
+      @wheel.passive="scrollWheel"
+      @keydown="scrollKey"
+      @pointerdown="pauseFollowing"
+      @touchmove.passive="pauseFollowing"
+    >
       <div v-if="!messages.length" class="chat-welcome">
         <div class="welcome-emblem"><Sparkles :size="28" :stroke-width="1.5" /></div>
         <div class="welcome-eyebrow">
