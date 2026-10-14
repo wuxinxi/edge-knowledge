@@ -45,3 +45,7 @@
 自动回归覆盖原六分数场景、OCR 跨切片/大小写/中文换行、低向量高文字匹配、无 OCR 的画面检索、混合输入、空结果、不把文件名当文字、跨库拒绝和扩大搜索的门槛。阈值仍是启发式，画面描述与别名可能漏召回或误召回，这次样例验收不等于通用跨模态质量校准。
 
 依据：[Chroma 文档过滤](https://docs.trychroma.com/reference/python)、[EmbeddingGemma 2 官方推理说明](https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers)。
+
+## 主题问答与笔记依据（2026-10-14）
+
+“asr 方案有哪些”的实际会话暴露了两个边界：助手模式被模型规划成查找后未生成回答；通用词“方案”导致无关方案误入、未写这个词的实战笔记被排除。此次增加通用问句噪声处理，普通助手问答优先文字笔记、不足时补充图片 OCR，明确查找和指定媒体范围保留。实际知识库隔离重放已命中用户指定 SenseVoice 笔记并由本地 2B 模型回答。完整原因、验收与覆盖边界见 [主题问答质量](topic-answer-quality.md)。

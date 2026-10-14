@@ -300,7 +300,16 @@ class ChatService:
             sources.append(
                 f"[{i}] 文件：{hit.filename}；依据：{label}；章节：{hit.section or '正文'}\n{text}"
             )
-        prompt = "<资料>\n" + "\n\n".join(sources) + f"\n</资料>\n\n用户问题：{question}"
+        prompt = (
+            "<资料>\n"
+            + "\n\n".join(sources)
+            + f"\n</资料>\n\n用户问题：{question}\n\n"
+            "回答要求：直接回答用户问题，只使用上面的资料。"
+            "列举方案时合并重复方案，写清已记载的用途与区别。"
+            "每个方案或事实结论后必须写支持它的资料编号，例如 [1]；"
+            "只引用本次实际提供且支持该结论的编号。"
+            "没有依据的信息写‘资料未记载’，不要凭常识补全或声称覆盖全部方案。"
+        )
         media_hits = [hit for hit in hits if hit.kind in {"audio", "video", "bundle"}]
         local_answer = None
         if not usable:

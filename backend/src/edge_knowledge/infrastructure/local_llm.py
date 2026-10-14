@@ -25,7 +25,10 @@ from edge_knowledge.infrastructure.deepseek import SYSTEM_PROMPT
 
 def local_planning_messages(question: str, context: dict) -> list:
     prompt = (
-        "只输出只读查询 JSON 计划，不直接回答。统计用 aggregate，检索用 search，总结用 answer。"
+        "只输出只读查询 JSON 计划，不直接回答。统计用 aggregate，查找原文用 search。"
+        "allow_answer=true 时，知识问题、有哪些选择、解释、比较、总结都用 answer；"
+        "search 只是查找资料，不会生成答案。text_query 保留核心主题和专业词，去掉问句套话，"
+        "例如‘缓存实现有哪些’检索‘缓存实现’，不要只检索‘实现’或‘方案’。"
         "检查笔记/文档重复内容用 duplicates；threshold 默认0.9，禁止删除。"
         "duplicates 的 text_query 必须为空，日期、标签、文件夹范围用 where。"
         "月份筛选用 gte 起始日和 lt 次月1日，不能用 in 列表。"
@@ -87,6 +90,12 @@ def local_planning_messages(question: str, context: dict) -> list:
             (
                 "概括部署流程",
                 {"operation": "answer", "text_query": "部署流程", "where": {"all": []}},
+            )
+        )
+        examples.append(
+            (
+                "数据库备份方式有哪些？",
+                {"operation": "answer", "text_query": "数据库备份", "where": {"all": []}},
             )
         )
     for q, answer in examples:

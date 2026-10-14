@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from edge_knowledge.domain.lookup import local_lookup
 from edge_knowledge.domain.models import AppError, SearchHit
 from edge_knowledge.domain.planning import calendar_constraints, ground_calendar_plan
 from edge_knowledge.domain.query import Predicate, QuerySpec, query_contract
@@ -231,6 +232,14 @@ class QueryService:
             self.mirror.ensure(library, documents)
             result = self.mirror.catalog.query(library, spec, ids, timezone)
             if spec.operation in {"search", "answer"}:
+                limit = min(spec.limit, self.knowledge.settings.read()["top_k"])
+                answer_requested = (
+                    explicit is None
+                    and planned != "local"
+                    and allow_planner
+                    and not local_only
+                    and local_lookup(question) is None
+                )
                 selected = result.pop("selected_ids", [])
                 if not selected:
                     hits = []
@@ -240,10 +249,44 @@ class QueryService:
                     hits = self.search(
                         library,
                         spec.text_query or question,
-                        min(spec.limit, self.knowledge.settings.read()["top_k"]),
+                        limit,
                         selected,
                         kinds,
                     )
+                    # General text questions prefer native notes; OCR is supplementary.
+                    # Explicit references, kind filters and plans keep their chosen scope.
+                    if (
+                        answer_requested
+                        and not ids
+                        and not any(p.field == "kind" for p in leaves(spec.where))
+                        and any(hit.kind == "image" for hit in hits)
+                    ):
+                        native_ids = [
+                            doc.id
+                            for doc in documents
+                            if doc.id in selected_set and doc.kind in {"document", "bundle"}
+                        ]
+                        if native_ids:
+                            native = self.search(
+                                library,
+                                spec.text_query or question,
+                                limit,
+                                native_ids,
+                                ["document", "bundle"],
+                            )
+                            seen = {(hit.document_id, hit.index) for hit in native}
+                            hits = (
+                                native
+                                + [hit for hit in hits if (hit.document_id, hit.index) not in seen]
+                            )[:limit]
+                # A planner's search is an evidence-gathering step in assistant mode.
+                # Keep deliberate lookups, explicit plans and media-only results local.
+                if (
+                    answer_requested
+                    and spec.operation == "search"
+                    and any(hit.kind in {"document", "bundle"} for hit in hits)
+                ):
+                    spec = replace(spec, operation="answer")
                 return {
                     "kind": "answer" if spec.operation == "answer" else "retrieval",
                     "sources": hits,
