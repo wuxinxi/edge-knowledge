@@ -14,6 +14,7 @@ from edge_knowledge.domain.query import Predicate, QuerySpec, query_contract
 from edge_knowledge.infrastructure.generators import SelectedGenerator
 from edge_knowledge.infrastructure.local_llm import (
     LlamaRuntime,
+    LocalGenerator,
     LocalQueryPlanner,
     LocalSession,
 )
@@ -78,6 +79,9 @@ def test_runtime_owns_authenticated_child_and_cleans_up_on_failure(tmp_path, mon
     args, options = captured[0]
     assert args[args.index("--host") + 1] == "127.0.0.1"
     assert "--offline" in args and "--log-disable" in args
+    assert args[args.index("--reasoning") + 1] == "auto"
+    assert args[args.index("--reasoning-format") + 1] == "deepseek"
+    assert args[args.index("--reasoning-budget") + 1] == "256"
     assert "--api-key-file" in args and "--api-key" not in args
     assert not options.get("shell")
     assert not Path(args[args.index("--api-key-file") + 1]).exists()
@@ -157,6 +161,153 @@ def test_local_planner_uses_schema_and_rejects_truncated_or_invalid_plans(monkey
     finish, output = "stop", {"operation": "delete", "sql": "DELETE"}
     with pytest.raises(AppError):
         planner.plan("问题", context)
+
+
+@pytest.mark.parametrize("goal", ["answer_current", "other", "invalid"])
+def test_reference_goal_is_bounded_and_precedes_complex_query_planning(monkeypatch, goal):
+    requests, budgets = [], []
+    runtime = SimpleNamespace(
+        session=lambda: LocalSession("http://127.0.0.1:1/v1", "local-token", 8192),
+        check_budget=lambda _, messages, tokens, *thinking: budgets.append(tokens),
+    )
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=self)
+            kwargs["http_client"].close()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def create(self, **kwargs):
+            requests.append(kwargs)
+            value = (
+                {"goal": goal}
+                if len(requests) == 1
+                else {"operation": "search", "text_query": "原文"}
+            )
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="stop",
+                        message=SimpleNamespace(content=json.dumps(value)),
+                    )
+                ]
+            )
+
+    monkeypatch.setattr("edge_knowledge.infrastructure.local_llm.OpenAI", Client)
+    context = {
+        "contract": query_contract(),
+        "allow_answer": True,
+        "current_documents": [
+            {
+                "title": "对比说明",
+                "filename": "note.md",
+                "path": "notes/note.md",
+                "body": "must not send",
+                "document_id": "private-id",
+            }
+        ],
+    }
+    planner = LocalQueryPlanner(runtime)
+    if goal == "invalid":
+        with pytest.raises(AppError) as exc:
+            planner.plan("任意选择问题", context)
+        assert exc.value.code == "invalid_local_plan" and len(requests) == 1
+    else:
+        result = planner.plan("任意选择问题", context)
+        assert result["operation"] == ("answer" if goal == "answer_current" else "search")
+        if goal == "answer_current":
+            assert result["use_context"] and result["source_scope"] == "full_document"
+            assert budgets == [512] and len(requests) == 1
+        else:
+            assert budgets == [512, 1400] and len(requests) == 2
+    encoded = json.dumps(requests[0]["messages"])
+    assert "must not send" not in encoded and "private-id" not in encoded
+    assert requests[0]["response_format"]["schema"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("empty_attempts", [0, 1, 2])
+def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
+    monkeypatch, stream, empty_attempts
+):
+    requests, budgets = [], []
+    runtime = SimpleNamespace(
+        session=lambda: LocalSession("http://127.0.0.1:1/v1", "local-token", 8192),
+        check_budget=lambda *args: budgets.append(args),
+    )
+
+    class Response:
+        def __init__(self, content):
+            self.content = content
+            self.choices = [
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=content, reasoning_content="private reasoning"),
+                )
+            ]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def __aiter__(self):
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content=None, reasoning_content="private reasoning"),
+                        finish_reason=None,
+                    )
+                ]
+            )
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content=self.content),
+                        finish_reason="stop",
+                    )
+                ]
+            )
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=self)
+            self.http_client = kwargs["http_client"]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            await self.http_client.aclose()
+
+        async def create(self, **kwargs):
+            requests.append(kwargs)
+            return Response(None if len(requests) <= empty_attempts else "最终答案 [1]")
+
+    monkeypatch.setattr("edge_knowledge.infrastructure.local_llm.AsyncOpenAI", Client)
+    plan = QueryPlan([], "给定依据", "edge-local", "", "", stream, provider="local")
+
+    async def collect():
+        return [part async for part in LocalGenerator(runtime).generate(plan)]
+
+    if empty_attempts == 2:
+        with pytest.raises(AppError) as exc:
+            asyncio.run(collect())
+        assert exc.value.code == "local_empty_answer"
+    else:
+        assert asyncio.run(collect()) == ["最终答案 [1]"]
+    assert len(requests) == (1 if empty_attempts == 0 else 2)
+    assert all(request["messages"] == requests[0]["messages"] for request in requests)
+    assert requests[0]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+    assert budgets[0][-2:] == (1536, True)
+    if empty_attempts:
+        assert requests[1]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
 
 
 def test_local_planning_in_search_mode_never_uses_cloud_even_if_cloud_is_selected(system):

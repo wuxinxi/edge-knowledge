@@ -223,3 +223,9 @@ ChatService 与 QueryService 通过可选标准库 Callable 报告真实阶段�
 ## 问答证据组装
 
 `application/evidence.py` 的 AnswerEvidence 在检索之后、生成之前补充已命中文字文档的上下文，复用 DocumentReading 或 KnowledgeService 的原文读取用例及其权限校验。它只依赖标准库和领域对象，通过 Callable 使用已组装的读取能力，不直接访问文件、索引或模型。自动补充有独立字符预算，真实 token 上限仍由生成器适配器检查。查询范围、原排名、非文字素材和明确节选合同保留；完整来源通过已有 SearchHit、SSE 和会话保存链路传递。详见 [问答证据补充](answer-evidence.md)。
+
+## 内容选择与本地生成完成边界
+
+ChatService 按已验证的操作分流，未解析请求才使用文字查找回退。QueryService 向规划端口提供明确引用与候选上下文的身份差异，不放宽资料交集或日期约束。本地基础设施先以有界目标判断承接内容问答，再输出领域 QuerySpec；选择规则由本地/云端规划适配器共享，应用层不依赖模型模板。
+
+LlamaRuntime 负责推理模板、独立预算和正文/推理字段分离；LocalGenerator 仅传递最终正文。空最终回答只允许一次相同依据的本地直接生成恢复，已经发出的流式内容不能重放；第二次为空是明确应用错误。API、会话和备份不增加推理正文。质量重放在独立临时库运行，不操作生产资料。详见 [内容选择问答与质量基线](answer-quality.md)。

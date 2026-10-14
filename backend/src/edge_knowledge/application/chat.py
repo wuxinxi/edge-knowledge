@@ -233,7 +233,9 @@ class ChatService:
             for hit in hits
             if hit.content_scope == "full_document" or hit.score >= config["min_score"]
         ]
-        if local_lookup(question):
+        # A validated tool plan owns the requested operation. Prefix heuristics
+        # only provide the fallback when no plan has resolved the request.
+        if not resolved and local_lookup(question):
             count = len({hit.document_id for hit in hits})
             return QueryPlan(
                 hits,

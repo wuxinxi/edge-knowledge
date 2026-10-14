@@ -225,6 +225,7 @@ class QueryService:
                             "timezone": timezone,
                             "allow_answer": not local_only,
                             "lookup_mode": lookup_mode,
+                            "references_explicit": bool(ids),
                             "current_documents": self.mirror.catalog.query(
                                 library, QuerySpec("list", limit=10), context_ids
                             )["rows"]

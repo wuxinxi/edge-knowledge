@@ -1,0 +1,78 @@
+{
+  "scope": "isolated synthetic notes; actual local models; no cloud",
+  "cases": [
+    {
+      "id": "voice_two_conditions",
+      "seconds": 11.79,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "legal_citations": true,
+        "no_error": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 85,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "database_two_conditions",
+      "seconds": 8.31,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "legal_citations": true,
+        "no_error": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 108,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "hotel_two_conditions",
+      "seconds": 6.75,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "legal_citations": true,
+        "no_error": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 191,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    }
+  ],
+  "passed": true
+}
