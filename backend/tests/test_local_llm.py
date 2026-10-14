@@ -246,6 +246,7 @@ def test_local_generation_execution_event_has_provider_without_cloud_key(system)
         "location": "local",
         "planner": "local_model",
         "generator": "local",
+        "result_kind": "answer",
     } in events
     assert generator.calls == 1 and "没有调用 DeepSeek" in result.text
     assert not knowledge.settings.api_key()

@@ -141,6 +141,7 @@ it('preserves structured query conditions across saving and retrying without swi
 it('empty local search explains the result without pretending to generate an answer', async () => {
   vi.mocked(api.localQuery).mockResolvedValue({
     sources: [],
+    kind: 'retrieval',
     content: '暂时没有找到相关资料。',
     notice: '本次仅在本机检索，不调用 DeepSeek。',
   })
@@ -148,6 +149,8 @@ it('empty local search explains the result without pretending to generate an ans
   await store.ask('default', '没有的资料', 'search')
   expect(store.conversations.default![1]!.content).toContain('没有找到相关资料')
   expect(api.query).not.toHaveBeenCalled()
+  setActivePinia(createPinia())
+  expect(useChatStore().current('default')!.messages[1]!.resultKind).toBe('retrieval')
 })
 
 it('defaults to local search and persists the explicit local execution notice', async () => {
@@ -166,7 +169,7 @@ it('defaults to local search and persists the explicit local execution notice', 
 it('uses the backend execution event to label a locally answered query accurately', async () => {
   vi.mocked(api.query).mockImplementation(async function* () {
     yield { type: 'sources', sources: [] }
-    yield { type: 'execution', location: 'local' }
+    yield { type: 'execution', location: 'local', result_kind: 'retrieval' }
     yield { type: 'notice', message: '本次仅在本机检索' }
     yield { type: 'delta', delta: '没有找到相关资料。' }
     yield { type: 'done' }
@@ -175,6 +178,7 @@ it('uses the backend execution event to label a locally answered query accuratel
   await store.ask('default', '帮我检索本地图片', 'chat')
   expect(store.current('default')!.messages[1]!.mode).toBe('search')
   expect(store.current('default')!.messages[1]!.status).toBe('complete')
+  expect(store.current('default')!.messages[1]!.resultKind).toBe('retrieval')
 })
 
 it('stopping a pending search cancels its transport and clears the busy state', async () => {

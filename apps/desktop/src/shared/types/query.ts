@@ -1,4 +1,12 @@
 export type QueryOperation = 'list' | 'aggregate' | 'search' | 'answer' | 'clarify' | 'duplicates'
+export const queryResultKinds = [
+  'retrieval',
+  'catalog',
+  'clarification',
+  'comparison',
+  'answer',
+] as const
+export type QueryResultKind = (typeof queryResultKinds)[number]
 export interface QueryFilter {
   field?: string
   op?: 'eq' | 'ne' | 'contains' | 'in' | 'gt' | 'gte' | 'lt' | 'lte' | 'exists' | 'missing'

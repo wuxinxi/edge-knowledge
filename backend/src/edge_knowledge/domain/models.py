@@ -116,6 +116,7 @@ class QueryPlan:
     planner: str = "local"
     provider: str = "deepseek"
     comparisons: list[dict] = field(default_factory=list)
+    result_kind: str = ""
 
 
 class AppError(Exception):

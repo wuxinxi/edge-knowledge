@@ -1,4 +1,5 @@
 import { chatStages } from '../../shared/types/processing'
+import { queryResultKinds } from '../../shared/types/query'
 import type { Conversation, Message } from '../chat/store'
 import { validatePreferences, type Preferences } from '../../shared/preferences/store'
 
@@ -48,6 +49,8 @@ export function validateChatBackup(value: unknown): Conversation[] {
         message.sources.length > 50
       )
         throw new Error('对话消息格式无效。')
+      if (message.resultKind != null && !queryResultKinds.includes(message.resultKind))
+        throw new Error('查询结果类型无效。')
       const sources = message.sources.map((source) => {
         if (
           !source ||
@@ -146,6 +149,9 @@ export function validateChatBackup(value: unknown): Conversation[] {
         ...(message.processing ? { processing: structuredClone(message.processing) } : {}),
         id: message.id,
         role: message.role,
+        ...(message.resultKind && queryResultKinds.includes(message.resultKind)
+          ? { resultKind: message.resultKind }
+          : {}),
         content: message.content,
         sources,
         ...(comparisons ? { comparisons } : {}),
@@ -180,6 +186,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                           versions: undefined,
                           comparisons: version.comparisons,
                           processing: version.processing,
+                          resultKind: version.resultKind,
                         },
                       ],
                     },
@@ -188,6 +195,7 @@ export function validateChatBackup(value: unknown): Conversation[] {
                 return {
                   content: version.content,
                   sources: nested.sources,
+                  ...(nested.resultKind ? { resultKind: nested.resultKind } : {}),
                   ...(nested.comparisons ? { comparisons: nested.comparisons } : {}),
                   savedAt: version.savedAt,
                   ...(nested.processing ? { processing: nested.processing } : {}),

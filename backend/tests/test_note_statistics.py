@@ -40,7 +40,7 @@ def test_month_count_answers_the_question_without_embeddings_or_cloud(system):
     answer = "".join(event.get("delta", "") for event in events)
     assert "12 篇" in answer
     assert "1 篇" in answer and "无法确认" in answer
-    assert {"type": "execution", "location": "local"} in events
+    assert {"type": "execution", "location": "local", "result_kind": "catalog"} in events
     assert generator.calls == 0
     knowledge.embedder.query = lambda _: (_ for _ in ()).throw(AssertionError("vector search"))
     client.patch("/api/settings", json={"api_key": ""})

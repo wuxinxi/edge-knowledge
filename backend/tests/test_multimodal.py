@@ -471,7 +471,7 @@ def test_chat_image_lookup_is_local_and_uses_focused_image_search(multimodal, mo
     events = [
         json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
     ]
-    assert {"type": "execution", "location": "local"} in events
+    assert {"type": "execution", "location": "local", "result_kind": "retrieval"} in events
     assert [row["document_id"] for row in events[0]["sources"]] == ["a" * 64]
     other = client.post("/api/libraries", json={"name": "other"}).json()["id"]
     assert (

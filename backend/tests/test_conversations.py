@@ -99,6 +99,8 @@ def test_api_authentication_validation_and_lossless_fields(system, tmp_path):
         assert client.get("/api/chat-state").status_code == 401
         client.headers["Authorization"] = "Bearer test-token"
         state = snapshot()
+        state["sessions"][0]["messages"][0]["resultKind"] = "retrieval"
+        state["sessions"][0]["messages"][0]["versions"][0]["resultKind"] = "clarification"
         assert client.post("/api/chat-state", json={**state, "revision": 0}).status_code == 200
         assert client.get("/api/chat-state").json()["sessions"] == state["sessions"]
         invalid = {**snapshot(), "revision": 1, "api_key": "secret-not-echoed"}

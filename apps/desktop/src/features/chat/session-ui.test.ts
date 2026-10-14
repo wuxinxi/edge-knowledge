@@ -8,6 +8,7 @@ import ChatView from './ChatView.vue'
 import { useLayoutStore } from '../../app/layout'
 import { useChatStore } from './store'
 import { memoryStorage } from '../../shared/preferences/test-storage'
+import { api } from '../../shared/api/client'
 
 vi.mock('../../app/store', () => ({
   useAppStore: () => ({ activeLibrary: 'default', libraries: [], health: {}, initialize: vi.fn() }),
@@ -15,9 +16,12 @@ vi.mock('../../app/store', () => ({
 vi.mock('../../shared/api/client', () => ({
   api: {
     documents: vi.fn().mockResolvedValue([]),
-    localQuery: vi
-      .fn()
-      .mockResolvedValue({ sources: [], content: '没有找到相关资料', notice: '本地检索' }),
+    localQuery: vi.fn().mockResolvedValue({
+      kind: 'retrieval',
+      sources: [],
+      content: '没有找到相关资料',
+      notice: '本地检索',
+    }),
     query: vi.fn(async function* () {
       yield { type: 'execution', location: 'local', generator: 'local' }
       yield { type: 'delta', delta: '本地模型回答' }
@@ -31,6 +35,7 @@ vi.mock('../../shared/api/client', () => ({
 }))
 let cleanup = () => {}
 beforeEach(() => {
+  vi.clearAllMocks()
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
   Object.defineProperty(HTMLDialogElement.prototype, 'close', {
     configurable: true,
@@ -211,4 +216,47 @@ it('restores unfinished questions and their modes after switching chats and leav
   expect(store.current('default')!.id).toBe(second.id)
   expect(input.value).toBe('第二个未发送问题')
   expect(first.draft).toBeUndefined()
+})
+
+it('puts an empty-result question back in the composer without sending or overwriting a draft', async () => {
+  const { root, store } = await mountShell(true)
+  const original = '  查找会议笔记\n保留原始换行  '
+  await store.ask('default', original, 'search')
+  await nextTick()
+  const edit = root.querySelector<HTMLButtonElement>('.empty-search-actions button')!
+  expect(edit.disabled).toBe(false)
+  edit.click()
+  await nextTick()
+  const input = root.querySelector<HTMLTextAreaElement>('.composer textarea')!
+  expect(input.value).toBe(original)
+  expect(document.activeElement).toBe(input)
+  expect(root.querySelector('.mode-selector button')?.getAttribute('aria-pressed')).toBe('true')
+  expect(api.localQuery).toHaveBeenCalledOnce()
+  expect(api.query).not.toHaveBeenCalled()
+  input.value = '我正在写的另一份问题'
+  input.dispatchEvent(new Event('input'))
+  await nextTick()
+  expect(edit.disabled).toBe(true)
+  edit.click()
+  expect(input.value).toBe('我正在写的另一份问题')
+  expect(store.current('default')!.messages).toHaveLength(2)
+})
+
+it('retains the chosen lookup mode after the first draft is sent and restored after navigation', async () => {
+  const { root, router } = await mountShell(true)
+  root.querySelector<HTMLButtonElement>('.mode-selector button')!.click()
+  const input = root.querySelector<HTMLTextAreaElement>('.composer textarea')!
+  input.value = '查找会议笔记'
+  input.dispatchEvent(new Event('input'))
+  // Sending before the next render also exercises first-draft navigation.
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(input.value).toBe('')
+  expect(root.querySelector('.mode-selector button')?.getAttribute('aria-pressed')).toBe('true')
+  expect(api.localQuery).toHaveBeenCalledOnce()
+  expect(api.query).not.toHaveBeenCalled()
+  await router.push('/library')
+  await router.push('/')
+  await nextTick()
+  expect(root.querySelector('.mode-selector button')?.getAttribute('aria-pressed')).toBe('true')
 })

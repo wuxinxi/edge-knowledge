@@ -373,6 +373,7 @@ export const useChatStore = defineStore('chat', () => {
       tasks.update(feedback, { phase: stageLabels[value] })
     }
     answer.queryPlan = queryPlan ? JSON.parse(JSON.stringify(queryPlan)) : undefined
+    answer.resultKind = undefined
     stage(mode === 'search' ? 'querying' : 'waiting')
     try {
       await persist()
@@ -388,6 +389,7 @@ export const useChatStore = defineStore('chat', () => {
           ? await api.localQuery(...args, queryPlan)
           : await api.localQuery(...args)
         answer.comparisons = result.comparisons
+        answer.resultKind = result.kind
         answer.sources = result.sources
         answer.content =
           result.kind === 'retrieval' &&
@@ -424,6 +426,7 @@ export const useChatStore = defineStore('chat', () => {
         if (event.type === 'execution') {
           answer.planner = event.planner
           answer.generator = event.generator
+          answer.resultKind = event.result_kind
           answer.mode = event.generator ? 'chat' : event.location === 'local' ? 'search' : 'chat'
           stage(event.generator ? 'generating' : 'presenting')
         }
@@ -486,6 +489,7 @@ export const useChatStore = defineStore('chat', () => {
       generator: original.generator,
       comparisons: original.comparisons,
       processing: original.processing,
+      resultKind: original.resultKind,
     })
     answer.status = 'streaming'
     answer.content = ''
@@ -519,6 +523,7 @@ export const useChatStore = defineStore('chat', () => {
           generator: original.generator,
           comparisons: answer.comparisons,
           processing: answer.processing,
+          resultKind: answer.resultKind,
         })
       }
       const versions = answer.versions

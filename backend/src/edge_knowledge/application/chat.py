@@ -205,6 +205,7 @@ class ChatService:
                 planner=resolved.get("query", {}).get("planner", "local"),
                 provider=provider,
                 comparisons=resolved.get("comparisons", []),
+                result_kind=resolved["kind"],
             )
         previous = next((item.content for item in reversed(history) if item.role == "user"), "")
         retrieval_question = contextual_question(question, previous)
@@ -229,6 +230,7 @@ class ChatService:
                 if hits
                 else "没有找到相关资料，请换个描述或缩小资料范围。",
                 notice="本次仅在本机检索并展示原文，不调用 DeepSeek，也不发送图片或文字。",
+                result_kind="retrieval",
             )
         report("preparing")
         image_hits = [hit for hit in hits if hit.kind == "image"]
@@ -331,6 +333,7 @@ class ChatService:
             history,
             resolved.get("query", {}).get("planner", "local") if resolved else "local",
             provider,
+            result_kind="retrieval" if local_answer is not None else "answer",
         )
 
     async def events(self, plan: QueryPlan) -> AsyncIterator[dict]:
@@ -340,6 +343,7 @@ class ChatService:
             "location": "local" if plan.local_answer or plan.provider == "local" else "cloud",
             **({"planner": plan.planner} if plan.planner != "local" else {}),
             **({"generator": plan.provider} if plan.local_answer is None else {}),
+            **({"result_kind": plan.result_kind} if plan.result_kind else {}),
         }
         if plan.comparisons:
             yield {"type": "comparisons", "comparisons": plan.comparisons}

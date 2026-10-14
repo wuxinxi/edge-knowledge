@@ -62,6 +62,9 @@ class ProcessingTrace(Strict):
 
 
 class AnswerVersion(Strict):
+    resultKind: Literal["retrieval", "catalog", "clarification", "comparison", "answer"] | None = (
+        None
+    )
     processing: ProcessingTrace | None = None
     content: str
     sources: list[SourceBody]
@@ -74,6 +77,9 @@ class AnswerVersion(Strict):
 
 
 class MessageBody(Strict):
+    resultKind: Literal["retrieval", "catalog", "clarification", "comparison", "answer"] | None = (
+        None
+    )
     processing: ProcessingTrace | None = None
     id: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]

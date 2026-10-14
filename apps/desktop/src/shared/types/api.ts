@@ -28,7 +28,7 @@ export interface Document {
 }
 export interface LocalQueryResult {
   comparisons?: DuplicateComparison[]
-  kind?: 'retrieval' | 'catalog' | 'clarification' | 'comparison'
+  kind?: import('./query').QueryResultKind
   query?: { plan?: import('./query').QuerySpec; planner?: 'local' | 'local_model' | 'deepseek' }
   sources: Source[]
   content: string
@@ -131,6 +131,7 @@ export type ChatEvent =
       location: 'local' | 'cloud'
       planner?: 'local' | 'local_model' | 'deepseek'
       generator?: 'local' | 'deepseek'
+      result_kind?: import('./query').QueryResultKind
     }
   | { type: 'sources'; sources: Source[] }
   | { type: 'comparisons'; comparisons: DuplicateComparison[] }

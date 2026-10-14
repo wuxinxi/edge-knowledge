@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApp, nextTick } from 'vue'
 import { createPinia } from 'pinia'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import ChatMessage from './ChatMessage.vue'
 import type { Message } from './store'
 import { api } from '../../shared/api/client'
@@ -26,7 +27,21 @@ const imageSource = {
   section: '图片文字',
   score: 0.8264,
 }
-async function mount(message: Message) {
+async function mount(
+  message: Message,
+  options: {
+    request?: Message
+    canRetry?: boolean
+    canEdit?: boolean
+    hasDraft?: boolean
+    onEdit?: () => void
+  } = {},
+) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: ['/', '/library'].map((path) => ({ path, component: { template: '<div />' } })),
+  })
+  await router.push('/')
   root = document.createElement('div')
   document.body.append(root)
   view = createApp(ChatMessage, {
@@ -34,7 +49,10 @@ async function mount(message: Message) {
     library: 'isolated-demo',
     generating: false,
     canRetry: false,
-  }).use(createPinia())
+    ...options,
+  })
+    .use(createPinia())
+    .use(router)
   view.mount(root)
   await new Promise((resolve) => setTimeout(resolve, 0))
   await nextTick()
@@ -265,6 +283,90 @@ it('labels statistics correctly and keeps supporting documents folded below the 
   expect(root.querySelector('.source-document-excerpt')).toBeNull()
   expect(root.querySelector('.source-disclosure')?.getAttribute('aria-expanded')).toBe('false')
   expect(root.textContent).toContain('共 3 份笔记')
+})
+
+it('shows actionable empty retrieval feedback with the original reference scope', async () => {
+  const edit = vi.fn()
+  await mount(
+    {
+      id: 'empty',
+      role: 'assistant',
+      mode: 'search',
+      resultKind: 'retrieval',
+      status: 'complete',
+      content: '没有找到相关资料',
+      sources: [],
+    },
+    {
+      request: {
+        id: 'q',
+        role: 'user',
+        content: '寻找部署步骤',
+        sources: [],
+        references: [{ id: 'doc', filename: '部署笔记.md' }],
+      },
+      canRetry: true,
+      canEdit: true,
+      onEdit: edit,
+    },
+  )
+  expect(root.querySelector('.empty-search-result')).not.toBeNull()
+  expect(root.querySelector('.empty-search-scope')?.textContent).toContain(
+    '仅引用资料 · 部署笔记.md',
+  )
+  expect(root.querySelector('.empty-search-actions a')?.getAttribute('href')).toBe('/library')
+  root.querySelector<HTMLButtonElement>('.empty-search-actions button')!.click()
+  await nextTick()
+  expect(edit).toHaveBeenCalledOnce()
+})
+
+it('protects existing drafts when editing an empty result question', async () => {
+  const edit = vi.fn()
+  await mount(
+    {
+      id: 'empty',
+      role: 'assistant',
+      resultKind: 'retrieval',
+      status: 'complete',
+      content: '没有找到相关资料',
+      sources: [],
+    },
+    {
+      request: { id: 'q', role: 'user', content: '问题', sources: [] },
+      canRetry: true,
+      canEdit: false,
+      hasDraft: true,
+      onEdit: edit,
+    },
+  )
+  const button = root.querySelector<HTMLButtonElement>('.empty-search-actions button')!
+  expect(button.disabled).toBe(true)
+  button.click()
+  expect(edit).not.toHaveBeenCalled()
+  expect(root.textContent).toContain('输入框已有草稿')
+})
+
+it.each([
+  ['catalog', 'complete'],
+  ['clarification', 'complete'],
+  ['comparison', 'complete'],
+  ['answer', 'complete'],
+  ['retrieval', 'error'],
+  ['retrieval', 'stopped'],
+  ['retrieval', 'streaming'],
+  [undefined, 'complete'],
+] as const)('does not misrepresent %s/%s as an empty retrieval', async (resultKind, status) => {
+  await mount({
+    id: 'other',
+    role: 'assistant',
+    mode: 'search',
+    resultKind,
+    status,
+    content: '保留原始说明',
+    sources: [],
+  })
+  expect(root.querySelector('.empty-search-result')).toBeNull()
+  expect(root.textContent).toContain('保留原始说明')
 })
 
 it('lets users read and copy long document results in place and shows paths for same-name notes', async () => {

@@ -28,6 +28,30 @@ const conversation = {
   ],
 }
 describe('portable conversation backups', () => {
+  it('keeps explicit result kinds and previous answer kinds through backup and restore', () => {
+    const message = {
+      ...conversation.messages[0]!,
+      resultKind: 'retrieval' as const,
+      versions: [
+        {
+          content: '请补充年份',
+          sources: [],
+          savedAt: '2026',
+          resultKind: 'clarification' as const,
+        },
+      ],
+    }
+    const backup = portableFrontend([{ ...conversation, messages: [message] }], preferenceDefaults)
+    const restored = restoredChats(backup.chats, { default: 'copy' })[0]!.messages[0]!
+    expect(restored.resultKind).toBe('retrieval')
+    expect(restored.versions![0]!.resultKind).toBe('clarification')
+    expect(() =>
+      validateChatBackup({
+        version: 1,
+        sessions: [{ ...conversation, messages: [{ ...message, resultKind: 'unknown' }] }],
+      }),
+    ).toThrow()
+  })
   it('preserves unsent drafts without including upload permission and rejects malformed drafts', () => {
     const draft = {
       content: '  完整草稿\n\n结尾  ',

@@ -4,6 +4,7 @@ export interface Reference {
   filename: string
 }
 export interface AnswerVersion {
+  resultKind?: import('./query').QueryResultKind
   processing?: import('./processing').ChatProcessing
   content: string
   sources: Source[]
@@ -15,6 +16,7 @@ export interface AnswerVersion {
   comparisons?: DuplicateComparison[]
 }
 export interface Message {
+  resultKind?: import('./query').QueryResultKind
   processing?: import('./processing').ChatProcessing
   id: string
   role: 'user' | 'assistant'

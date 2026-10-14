@@ -257,6 +257,17 @@ const english: Record<string, string> = {
   展开阅读: 'Read more',
   收起阅读: 'Read less',
   复制片段: 'Copy excerpt',
+  暂未找到匹配资料: 'No matching files found yet',
+  '试试文件名、笔记标题或几个关键词，也可以确认所需资料是否已经导入。':
+    'Try a file name, note title or a few keywords, or check that the files have been imported.',
+  检索范围: 'Search scope',
+  会话知识库: 'This conversation’s library',
+  仅引用资料: 'Referenced files only',
+  修改问题: 'Edit question',
+  查看资料库: 'View library',
+  '输入框已有草稿，可以直接继续修改。':
+    'A draft is already in the composer. You can continue editing it there.',
+  需要补充条件: 'More details needed',
   分析资料: 'Analyzing files',
   '正在本地分析选定资料，首次加载模型可能较慢。':
     'Analyzing selected files locally. The model may take longer on first use.',

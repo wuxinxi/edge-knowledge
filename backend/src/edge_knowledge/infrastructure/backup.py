@@ -135,6 +135,9 @@ class ProcessingTrace(StrictModel):
 
 
 class AnswerVersionValue(StrictModel):
+    resultKind: Literal["retrieval", "catalog", "clarification", "comparison", "answer"] | None = (
+        None
+    )
     processing: ProcessingTrace | None = None
     content: str
     sources: list[SourceValue]
@@ -147,6 +150,9 @@ class AnswerVersionValue(StrictModel):
 
 
 class MessageValue(StrictModel):
+    resultKind: Literal["retrieval", "catalog", "clarification", "comparison", "answer"] | None = (
+        None
+    )
     processing: ProcessingTrace | None = None
     id: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]

@@ -55,7 +55,7 @@ def test_direct_information_lookup_is_local_with_or_without_a_key(system):
         events = [
             json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
         ]
-        assert {"type": "execution", "location": "local"} in events
+        assert {"type": "execution", "location": "local", "result_kind": "retrieval"} in events
         assert events[0]["sources"][0]["filename"] == "guide.md"
         assert generator.calls == 0
     client.patch("/api/settings", json={"api_key": "configured-test-key"})
@@ -68,6 +68,25 @@ def test_empty_lookup_does_not_fall_back_to_cloud(system):
     response = client.post("/api/query", json={"question": "请查找没有的笔记"})
     assert response.status_code == 200 and generator.calls == 0
     assert "没有找到相关资料" in response.text
+    events = [
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+    ]
+    assert {"type": "execution", "location": "local", "result_kind": "retrieval"} in events
+
+
+def test_empty_statistics_and_clarification_keep_their_distinct_result_kinds(system):
+    client, _, _, generator = system
+    for spec, kind in [
+        ({"operation": "aggregate"}, "catalog"),
+        ({"operation": "clarify", "clarification": "请提供年份"}, "clarification"),
+    ]:
+        response = client.post("/api/query", json={"question": "执行查询", "query_plan": spec})
+        assert response.status_code == 200
+        events = [
+            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+        ]
+        assert {"type": "execution", "location": "local", "result_kind": kind} in events
+    assert generator.calls == 0
 
 
 def test_picture_classifier_handles_bare_tu_and_demonstratives():

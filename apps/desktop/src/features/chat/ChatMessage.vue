@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Copy, Check, RotateCcw, Sparkles, Search } from '@lucide/vue'
 import type { Message } from './store'
 import { useI18n } from '../../shared/i18n'
@@ -9,18 +9,30 @@ import DuplicateMatches from './DuplicateMatches.vue'
 import type { TaskRecord } from '../tasks/store'
 import TaskFeedback from '../tasks/TaskFeedback.vue'
 import ChatActivity from './ChatActivity.vue'
+import EmptySearchResult from './EmptySearchResult.vue'
 const props = defineProps<{
   message: Message
   library: string
   task?: TaskRecord
   generating: boolean
   canRetry: boolean
+  request?: Message
+  canEdit?: boolean
+  hasDraft?: boolean
 }>()
-const emit = defineEmits<{ retry: [] }>()
+const emit = defineEmits<{ retry: []; edit: [] }>()
 const { t } = useI18n()
 const copied = ref(false)
 const copyError = ref('')
 const sourcesPanel = ref<InstanceType<typeof AnswerSources>>()
+const emptySearch = computed(
+  () =>
+    props.message.resultKind === 'retrieval' &&
+    props.message.status === 'complete' &&
+    !props.message.sources.length &&
+    !props.message.error &&
+    !props.message.comparisons?.length,
+)
 watch(
   () => props.message.content,
   () => {
@@ -75,25 +87,27 @@ async function copy() {
           t(
             generating && !message.generator && !message.content
               ? '处理中'
-              : message.queryPlan?.operation === 'aggregate'
-                ? message.planner === 'deepseek'
-                  ? '本机统计 · AI 规划'
-                  : message.planner === 'local_model'
-                    ? '本机统计 · 本地模型规划'
-                    : '本地统计'
-                : message.comparisons?.length
+              : message.resultKind === 'clarification'
+                ? '需要补充条件'
+                : message.queryPlan?.operation === 'aggregate'
                   ? message.planner === 'deepseek'
-                    ? '重复检查 · AI 规划'
-                    : '本地重复检查'
-                  : message.planner === 'deepseek' && message.mode === 'search'
-                    ? '本机结果 · AI 规划'
-                    : message.planner === 'local_model' && message.mode === 'search'
-                      ? '本机结果 · 本地模型规划'
-                      : message.mode === 'search' || (generating && task?.phase === '查找资料')
-                        ? '本地检索'
-                        : message.generator === 'local'
-                          ? '本地模型回答'
-                          : 'DeepSeek 解读',
+                    ? '本机统计 · AI 规划'
+                    : message.planner === 'local_model'
+                      ? '本机统计 · 本地模型规划'
+                      : '本地统计'
+                  : message.resultKind === 'comparison' || message.comparisons?.length
+                    ? message.planner === 'deepseek'
+                      ? '重复检查 · AI 规划'
+                      : '本地重复检查'
+                    : message.planner === 'deepseek' && message.mode === 'search'
+                      ? '本机结果 · AI 规划'
+                      : message.planner === 'local_model' && message.mode === 'search'
+                        ? '本机结果 · 本地模型规划'
+                        : message.mode === 'search' || (generating && task?.phase === '查找资料')
+                          ? '本地检索'
+                          : message.generator === 'local'
+                            ? '本地模型回答'
+                            : 'DeepSeek 解读',
           )
         }}</span>
       </div>
@@ -116,12 +130,20 @@ async function copy() {
           class="chat-task-feedback"
         />
         <MarkdownAnswer
-          v-if="message.content"
+          v-if="message.content && !emptySearch"
           :content="message.content"
           :source-count="message.sources.length"
           @source="sourcesPanel?.open($event)"
         />
-        <div v-else-if="generating && !task" class="answer-thinking" role="status">
+        <EmptySearchResult
+          v-if="emptySearch"
+          :references="request?.references ?? []"
+          :show-edit="!!request && canRetry && !request.queryPlan"
+          :can-edit="!!canEdit"
+          :has-draft="!!hasDraft"
+          @edit="emit('edit')"
+        />
+        <div v-if="!message.content && generating && !task" class="answer-thinking" role="status">
           <span></span><span></span><span></span>{{ t('正在查找资料并整理回答…') }}
         </div>
         <div

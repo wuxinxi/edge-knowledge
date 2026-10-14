@@ -20,6 +20,7 @@ import QueryBuilder from './QueryBuilder.vue'
 import ChatMenu from './ChatMenu.vue'
 import { followsLatest } from './scroll'
 import type { QuerySpec } from '../../shared/types/query'
+import type { Message } from './store'
 import './chat.css'
 
 const app = useAppStore()
@@ -178,13 +179,30 @@ async function send(value = question.value) {
   if (!value.trim() || chat.busy || chat.loading || !app.health) return
   followLatest.value = true
   const allowed = allowImageUpload.value
+  const requestedMode = mode.value
+  fallbackMode.value = requestedMode
   allowImageUpload.value = false
-  await chat.ask(app.activeLibrary, value, mode.value, allowed)
+  await chat.ask(app.activeLibrary, value, requestedMode, allowed)
 }
 async function retryMessage(id: string) {
   const allowed = allowImageUpload.value && cloudVision.value
   allowImageUpload.value = false
   await chat.retry(app.activeLibrary, id, allowed)
+}
+function editQuestion(index: number) {
+  const request: Message | undefined = messages.value[index - 1]
+  if (
+    chat.busy ||
+    chat.loading ||
+    question.value.length ||
+    request?.role !== 'user' ||
+    request.queryPlan
+  )
+    return
+  mode.value = request.mode ?? 'search'
+  question.value = request.content
+  allowImageUpload.value = false
+  void nextTick(() => composerInput.value?.focus())
 }
 async function executeLocalQuery(plan: QuerySpec, label: string) {
   if (chat.busy || chat.loading || !app.health) return
@@ -205,9 +223,16 @@ watch(
     if (!conversation.value?.messages.some((message) => message.id === chat.activeAnswerId))
       chat.stop()
     followLatest.value = true
-    fallbackMode.value = 'chat'
+    fallbackMode.value =
+      conversation.value?.draft?.mode ??
+      conversation.value?.messages
+        .slice()
+        .reverse()
+        .find((message) => message.role === 'user')?.mode ??
+      'chat'
     allowImageUpload.value = false
   },
+  { immediate: true },
 )
 watch(mode, () => {
   allowImageUpload.value = false
@@ -268,7 +293,11 @@ watch(
           :task="message.id === chat.activeAnswerId ? chat.activeTask : undefined"
           :generating="chat.busy && index === messages.length - 1"
           :can-retry="!chat.busy && index === messages.length - 1"
+          :request="messages[index - 1]?.role === 'user' ? messages[index - 1] : undefined"
+          :can-edit="!chat.busy && !chat.loading && !question.length"
+          :has-draft="!!question.length"
           @retry="retryMessage(message.id)"
+          @edit="editQuestion(index)"
         />
       </div>
     </div>
