@@ -219,3 +219,7 @@ ChatService 与 QueryService 通过可选标准库 Callable 报告真实阶段�
 ## 聊天引用的目录浏览
 
 `QueryService.reference_choices` 复用目录镜像与现有 QuerySpec 过滤/排序/分页，输出有界身份摘要，不返回正文，也不调用嵌入或生成端口。API 验证关键词和分页边界；renderer 通过共享客户端访问并取消过期请求。引用的 title / path 作为可选展示快照进入原有会话与备份契约；执行范围仍只由真实资料 ID 和当前知识库归属决定。详见 [资料引用说明](reference-selection.md)。
+
+## 问答证据组装
+
+`application/evidence.py` 的 AnswerEvidence 在检索之后、生成之前补充已命中文字文档的上下文，复用 DocumentReading 或 KnowledgeService 的原文读取用例及其权限校验。它只依赖标准库和领域对象，通过 Callable 使用已组装的读取能力，不直接访问文件、索引或模型。自动补充有独立字符预算，真实 token 上限仍由生成器适配器检查。查询范围、原排名、非文字素材和明确节选合同保留；完整来源通过已有 SearchHit、SSE 和会话保存链路传递。详见 [问答证据补充](answer-evidence.md)。

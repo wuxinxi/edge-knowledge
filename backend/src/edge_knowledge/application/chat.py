@@ -7,6 +7,7 @@ from edge_knowledge.domain.models import AppError, HistoryMessage, QueryPlan, Se
 from edge_knowledge.domain.retrieval import contextual_question
 
 from .catalog import CatalogMirror
+from .evidence import AnswerEvidence
 from .knowledge import KnowledgeService
 from .ports import Generator, LocalModelRuntime, QueryPlanner, SettingsStore, SourceStore
 from .query import QueryService
@@ -42,6 +43,9 @@ class ChatService:
             )
             if catalog
             else None
+        )
+        self.evidence = AnswerEvidence(
+            self.queries.reading.source if self.queries else knowledge.read_document
         )
 
     def _retrieve(self, library: str, text: str, limit: int, ids: list[str], kinds: list[str]):
@@ -245,6 +249,9 @@ class ChatService:
                 result_kind="retrieval",
             )
         report("preparing")
+        if not query_plan or query_plan.get("source_scope") != "excerpt":
+            with self.knowledge.transaction():
+                hits = self.evidence.expand(library_id, hits)
         image_hits = [hit for hit in hits if hit.kind == "image"]
         attachments, notice = [], ""
         usable = [
@@ -303,7 +310,7 @@ class ChatService:
         for i, hit in enumerate(hits, 1):
             if hit not in usable:
                 continue
-            label = "文档文字"
+            label = "文档节选（非全文）"
             text = hit.text if hit.content_scope == "full_document" else hit.text[:4000]
             if hit.content_scope == "full_document":
                 label = "完整文档原文"
@@ -318,9 +325,14 @@ class ChatService:
             "<资料>\n" + "\n\n".join(sources) + f"\n</资料>\n\n用户问题：{question}\n\n"
             "回答要求：直接回答用户问题，只使用上面的资料。"
             "列举方案时合并重复方案，写清已记载的用途与区别。"
+            "选择或推荐时，先给出资料支持的具体名称，再说明适用条件和限制，"
+            "不要只回答抽象能力或选择原则；若条件不足，列出具体候选与需要确认的条件。"
+            "用户要求选一个时，开头一句先给一个首选及简短理由，不要用完整候选清单代替结论；"
+            "仅在资料无法支持唯一选择时说明缺少的决定条件。"
             "每个方案或事实结论后必须写支持它的资料编号，例如 [1]；"
             "只引用本次实际提供且支持该结论的编号。"
-            "没有依据的信息写‘资料未记载’，不要凭常识补全或声称覆盖全部方案。"
+            "没有依据的信息写‘当前依据不足’，不要凭常识补全或声称覆盖全部方案。"
+            "节选中没有某项信息不代表原文没有，不得据此断言整篇资料未记载。"
         )
         media_hits = [hit for hit in hits if hit.kind in {"audio", "video", "bundle"}]
         local_answer = None
