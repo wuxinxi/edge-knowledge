@@ -653,6 +653,25 @@
 .source-reading-actions .rotated {
   transform: rotate(180deg);
 }
+.source-document-excerpt > .source-reading-actions {
+  margin: 0 0 10px;
+}
+.source-reading-toolbar {
+  padding: 8px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.source-reading-toolbar.is-expanded {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.source-reading-collapse {
+  margin-top: 12px;
+}
+.source-reading-collapse .rotated {
+  transform: rotate(180deg);
+}
 .source-path {
   overflow-wrap: anywhere;
   font-size: var(--text-caption);
@@ -690,6 +709,10 @@
   border-radius: 12px;
   overflow: hidden;
   background: var(--surface);
+}
+.inline-source-grid > .source-document-result {
+  /* Clip rounded cards without creating a scroll container for reading tools. */
+  overflow: clip;
 }
 .inline-source-grid > .answer-source-result > .answer-source-card {
   border: 0;

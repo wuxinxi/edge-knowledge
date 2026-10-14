@@ -493,3 +493,48 @@ it('offers full article reading for excerpt results while keeping the excerpt la
   expect(root.textContent).toContain('阅读全文')
   expect(root.textContent).not.toContain('完整原文')
 })
+
+it.each(['full_document', undefined] as const)(
+  'keeps a collapse control before an expanded %s body and lets either end collapse it',
+  async (content_scope) => {
+    await mount({
+      id: 'long-reading',
+      role: 'assistant',
+      mode: 'search',
+      content: '阅读资料',
+      sources: [
+        {
+          document_id: 'doc',
+          filename: 'note.md',
+          section: '演示笔记',
+          text: '阅读段落。'.repeat(300),
+          index: 0,
+          score: 0.8,
+          content_scope,
+        },
+      ],
+    })
+    const reading = root.querySelector<HTMLElement>('.source-excerpt-reading')!
+    const toolbar = root.querySelector<HTMLElement>('.source-reading-toolbar')
+    expect(toolbar).not.toBeNull()
+    expect(
+      toolbar!.compareDocumentPosition(reading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    const toggle = toolbar!.querySelector<HTMLButtonElement>('[aria-expanded]')!
+    toggle.click()
+    await nextTick()
+    expect(toggle.textContent).toContain('收起阅读')
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(root.querySelector('.source-reading-collapse')).not.toBeNull()
+    toggle.click()
+    await nextTick()
+    expect(reading.classList.contains('is-clipped')).toBe(true)
+    toggle.click()
+    await nextTick()
+    root.querySelector<HTMLButtonElement>('.source-reading-collapse')!.click()
+    await nextTick()
+    expect(reading.classList.contains('is-clipped')).toBe(true)
+    expect(root.querySelector('.source-reading-collapse')).toBeNull()
+    expect(document.activeElement).toBe(toggle)
+  },
+)

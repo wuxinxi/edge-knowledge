@@ -16,6 +16,7 @@ const image = computed(() => props.source.kind === 'image')
 const preview = computed(() => sourcePreview(props.source.text))
 const expanded = ref(false),
   overflowed = ref(false),
+  readingToggle = ref<HTMLButtonElement>(),
   excerptElement = ref<HTMLElement>()
 const hasMore = computed(
   () => props.compact && (overflowed.value || preview.value.body.length > 1200),
@@ -55,6 +56,15 @@ async function copy() {
     error.value = t('无法复制，请直接选择文字复制。')
   }
 }
+async function toggleReading() {
+  expanded.value = !expanded.value
+  if (expanded.value) return
+  await nextTick()
+  // Restore a reachable reading anchor when collapsing removes content above
+  // the current viewport, and keep keyboard focus out of the removed footer.
+  readingToggle.value?.focus({ preventScroll: true })
+  readingToggle.value?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
+}
 </script>
 <template>
   <div class="source-content" :class="{ 'source-content-image': image }">
@@ -79,20 +89,16 @@ async function copy() {
       </dl>
       <p v-if="source.section" class="source-section-label">{{ source.section }}</p>
       <div
-        ref="excerptElement"
-        class="source-excerpt-reading"
-        :class="{ 'is-clipped': hasMore && !expanded }"
-        @focusin="expanded = true"
+        class="source-reading-actions"
+        :class="{ 'source-reading-toolbar': hasMore, 'is-expanded': hasMore && expanded }"
       >
-        <MarkdownAnswer v-if="preview.body" :content="preview.body" :source-count="0" />
-      </div>
-      <div class="source-reading-actions">
         <button
           v-if="hasMore"
+          ref="readingToggle"
           type="button"
           class="answer-action"
           :aria-expanded="expanded"
-          @click="expanded = !expanded"
+          @click="toggleReading"
         >
           {{
             t(
@@ -117,6 +123,23 @@ async function copy() {
         </button>
         <span v-if="error" class="message-copy-status" role="alert">{{ error }}</span>
       </div>
+      <div
+        ref="excerptElement"
+        class="source-excerpt-reading"
+        :class="{ 'is-clipped': hasMore && !expanded }"
+        @focusin="expanded = true"
+      >
+        <MarkdownAnswer v-if="preview.body" :content="preview.body" :source-count="0" />
+      </div>
+      <button
+        v-if="hasMore && expanded"
+        type="button"
+        class="answer-action source-reading-collapse"
+        :aria-expanded="expanded"
+        @click="toggleReading"
+      >
+        {{ t('收起阅读') }}<ChevronDown :size="13" class="rotated" />
+      </button>
     </div>
     <p v-if="image" class="source-content-caption">
       {{ t('本地图片') }} ·
