@@ -226,3 +226,31 @@ it('preserves full document scope and all text through backup restoration and an
     }),
   ).toThrow()
 })
+
+it('keeps titles and paths for current, submitted and optional-context references through portable backup', () => {
+  const reference = {
+    id: 'note',
+    filename: 'index.md',
+    title: '项目部署手册',
+    path: '项目/部署/index.md',
+  }
+  const chat = {
+    ...conversation,
+    references: [reference],
+    messages: [
+      { ...conversation.messages[0]!, references: [reference], contextReferences: [reference] },
+    ],
+  }
+  const backup = portableFrontend([chat], preferenceDefaults)
+  const restored = restoredChats(backup.chats, { default: 'copy' })[0]!
+  expect(restored.references).toEqual([reference])
+  expect(restored.messages[0]!.references).toEqual([reference])
+  expect(restored.messages[0]!.contextReferences).toEqual([reference])
+  for (const invalid of [{ title: 42 }, { path: 'a'.repeat(4097) }])
+    expect(() =>
+      validateChatBackup({
+        version: 1,
+        sessions: [{ ...chat, references: [{ ...reference, ...invalid }] }],
+      }),
+    ).toThrow('引用')
+})

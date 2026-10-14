@@ -91,6 +91,37 @@ def test_api_preserves_draft_on_reopen_and_rejects_upload_permission(system, tmp
         }
 
 
+def test_reference_identity_labels_survive_durable_save_and_backup_validation(system, tmp_path):
+    from edge_knowledge.infrastructure.backup import frontend_data
+
+    _, knowledge, chat, *_ = system
+    path = tmp_path / "references.sqlite3"
+    service = ConversationService(SQLiteConversationStore(path))
+    reference = {
+        "id": "note",
+        "filename": "index.md",
+        "title": "项目部署手册",
+        "path": "项目/部署/index.md",
+    }
+    state = snapshot()
+    session = state["sessions"][0]
+    session["references"] = [reference]
+    session["messages"][0]["references"] = [reference]
+    session["messages"][0]["contextReferences"] = [reference]
+    with TestClient(create_app(knowledge, chat, "test-token", conversations=service)) as client:
+        client.headers["Authorization"] = "Bearer test-token"
+        assert client.post("/api/chat-state", json={**state, "revision": 0}).status_code == 200
+        restored = SQLiteConversationStore(path).read()["sessions"][0]
+        assert restored["references"] == [reference]
+        assert restored["messages"][0]["references"] == [reference]
+        assert restored["messages"][0]["contextReferences"] == [reference]
+        portable = frontend_data({"chats": state})["chats"]["sessions"][0]
+        assert portable["references"] == [reference]
+        assert portable["messages"][0]["contextReferences"] == [reference]
+        session["references"][0]["path"] = 42
+        assert client.post("/api/chat-state", json={**state, "revision": 1}).status_code == 422
+
+
 def test_api_authentication_validation_and_lossless_fields(system, tmp_path):
     _, knowledge, chat, *_ = system
     service = ConversationService(SQLiteConversationStore(tmp_path / "state.sqlite3"))

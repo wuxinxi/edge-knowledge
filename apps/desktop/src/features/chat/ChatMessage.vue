@@ -11,6 +11,7 @@ import TaskFeedback from '../tasks/TaskFeedback.vue'
 import ChatActivity from './ChatActivity.vue'
 import EmptySearchResult from './EmptySearchResult.vue'
 import type { Source } from '../../shared/types/api'
+import { referenceLabel, referenceDescription } from './references'
 const props = defineProps<{
   message: Message
   library: string
@@ -76,8 +77,11 @@ async function copy() {
       ><div class="user-prompt">
         <p>{{ message.content }}</p>
         <div v-if="message.references?.length" class="message-reference-list">
-          <span v-for="reference in message.references" :key="reference.id"
-            >@{{ reference.filename }}</span
+          <span
+            v-for="reference in message.references"
+            :key="reference.id"
+            :title="referenceDescription(reference)"
+            >@{{ referenceLabel(reference) }}</span
           >
         </div>
       </div></template

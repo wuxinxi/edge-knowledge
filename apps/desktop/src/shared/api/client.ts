@@ -18,6 +18,7 @@ import type {
   SettingsPatch,
   Source,
   LocalQueryResult,
+  ReferenceChoices,
 } from '../types/api'
 import { readSSE } from './sse'
 import type { ChatSnapshot, SavedChatState } from '../types/conversations'
@@ -182,6 +183,11 @@ export const api = {
     json<Library>('/api/libraries', { method: 'POST', ...payload({ name }) }),
   documents: (library: string) =>
     json<Document[]>(`/api/libraries/${encodeURIComponent(library)}/documents`),
+  referenceChoices: (library: string, query: string, offset: number, signal: AbortSignal) =>
+    json<ReferenceChoices>(
+      `/api/libraries/${encodeURIComponent(library)}/reference-choices?${new URLSearchParams({ q: query, offset: String(offset), limit: '20' })}`,
+      { signal },
+    ),
   async ingest(library: string, file: File) {
     const form = new FormData()
     form.append('file', file)

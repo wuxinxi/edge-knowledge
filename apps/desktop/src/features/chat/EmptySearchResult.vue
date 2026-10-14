@@ -3,6 +3,7 @@ import { SearchX, Pencil, ArrowRight } from '@lucide/vue'
 import { RouterLink } from 'vue-router'
 import type { Reference } from './store'
 import { useI18n } from '../../shared/i18n'
+import { referenceLabel, referenceDescription } from './references'
 defineProps<{ references: Reference[]; showEdit: boolean; canEdit: boolean; hasDraft: boolean }>()
 const emit = defineEmits<{ edit: [] }>()
 const { t } = useI18n()
@@ -16,14 +17,9 @@ const { t } = useI18n()
       <div class="empty-search-scope">
         <span>{{ t('检索范围') }}</span>
         <span v-if="!references.length">{{ t('会话知识库') }}</span>
-        <span v-else :title="references.map((item) => item.filename).join(' · ')">
+        <span v-else :title="references.map(referenceDescription).join('\n\n')">
           {{ t('仅引用资料') }} ·
-          {{
-            references
-              .map((item) => item.filename)
-              .slice(0, 3)
-              .join(' · ')
-          }}
+          {{ references.map(referenceLabel).slice(0, 3).join(' · ') }}
           <template v-if="references.length > 3"> · +{{ references.length - 3 }}</template>
         </span>
       </div>

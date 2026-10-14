@@ -21,6 +21,7 @@ import ChatMenu from './ChatMenu.vue'
 import { followsLatest } from './scroll'
 import type { QuerySpec } from '../../shared/types/query'
 import type { Message } from './store'
+import { sourceReference } from './references'
 import './chat.css'
 
 const app = useAppStore()
@@ -225,7 +226,7 @@ async function articleAction(source: import('../../shared/types/api').Source, su
       operation: summarize ? 'answer' : 'read',
       ...(summarize ? { source_scope: 'full_document' as const } : {}),
     },
-    [{ id: source.document_id, filename: source.filename }],
+    [sourceReference(source)],
   )
 }
 function editQuestion(index: number) {

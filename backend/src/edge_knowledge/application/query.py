@@ -112,6 +112,35 @@ class QueryService:
         self.compare = compare
         self.reading = DocumentReading(knowledge, mirror)
 
+    def reference_choices(self, library: str, query: str, limit: int, offset: int) -> dict:
+        """Browse identities through the catalogue, without retrieving or generating content."""
+        query = query.strip()
+        where = (
+            Predicate(
+                any=tuple(
+                    Predicate(field, "contains", query) for field in ("title", "filename", "path")
+                )
+            )
+            if query
+            else Predicate()
+        )
+        plan = QuerySpec.parse(
+            QuerySpec("list", where=where, order_by="title", limit=limit, offset=offset).mapping()
+        )
+        with self.knowledge.transaction():
+            documents = self.knowledge.repository.documents(library)
+            self.mirror.ensure(library, documents)
+            result = self.mirror.catalog.query(library, plan, [])
+            return {
+                "items": [
+                    {key: row[key] for key in ("document_id", "filename", "title", "path", "kind")}
+                    for row in result["rows"]
+                ],
+                "total": result["total"],
+                "offset": offset,
+                "limit": limit,
+            }
+
     def schema(self, library: str, ids: list[str]):
         with self.knowledge.transaction():
             docs = self.knowledge.repository.documents(library)

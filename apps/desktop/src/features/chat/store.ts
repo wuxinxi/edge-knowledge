@@ -15,6 +15,7 @@ export type { Conversation, Message, Reference } from '../../shared/types/conver
 import { useTaskStore } from '../tasks/store'
 import { updateConversationTitle } from './title'
 import { conversationDocuments } from './query-context'
+import { sourceReference } from './references'
 import { chatStages, stageLabels, type ChatStage } from '../../shared/types/processing'
 
 const storageKey = 'edge-assistant.chats.v1'
@@ -374,7 +375,7 @@ export const useChatStore = defineStore('chat', () => {
         session.library === library && session.messages.some((message) => message.id === answer.id),
     )
     if (owner) {
-      owner.references = [{ id: source.document_id, filename: source.filename }]
+      owner.references = [sourceReference(source)]
       owner.contextEnabled = true
     }
   }

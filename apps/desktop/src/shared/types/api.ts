@@ -26,6 +26,19 @@ export interface Document {
   duration?: number
   assets?: number
 }
+export interface ReferenceChoice {
+  document_id: string
+  filename: string
+  title: string
+  path: string
+  kind: MediaKind
+}
+export interface ReferenceChoices {
+  items: ReferenceChoice[]
+  total: number
+  offset: number
+  limit: number
+}
 export interface LocalQueryResult {
   comparisons?: DuplicateComparison[]
   kind?: import('./query').QueryResultKind

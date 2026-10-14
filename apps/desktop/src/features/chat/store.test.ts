@@ -630,9 +630,11 @@ it('continues from a single local article to a local summary and retains scope o
     },
   )
   const question = reopened.current('default')!.messages.at(-2)!
-  expect(question.references).toEqual([{ id: source.document_id, filename: 'index.md' }])
+  expect(question.references).toEqual([
+    { id: source.document_id, filename: 'index.md', title: '228M SenseVoice 实战' },
+  ])
   expect(reopened.current('default')!.references).toEqual([
-    { id: source.document_id, filename: 'index.md' },
+    { id: source.document_id, filename: 'index.md', title: '228M SenseVoice 实战' },
   ])
   expect(reopened.current('default')!.messages.at(-1)!.generator).toBe('local')
   await reopened.retry('default', reopened.current('default')!.messages.at(-1)!.id)
@@ -721,7 +723,7 @@ it('opening any complete resource establishes visible references, restored on re
   const store = useChatStore()
   await store.ask('default', '把会议记录展开', 'search')
   expect(store.current('default')!.references).toEqual([
-    { id: source.document_id, filename: 'meeting.md' },
+    { id: source.document_id, filename: 'meeting.md', title: '会议纪要' },
   ])
   setActivePinia(createPinia())
   const reopened = useChatStore()
@@ -786,7 +788,7 @@ it('establishes the same working resource for natural-language reading through s
   const store = useChatStore()
   await store.ask('default', '自然语言请求完整资料', 'chat')
   expect(store.current('default')!.references).toEqual([
-    { id: source.document_id, filename: source.filename },
+    { id: source.document_id, filename: source.filename, title: '部署' },
   ])
   await store.ask('default', '接着整理要点', 'search')
   expect(vi.mocked(api.query).mock.calls.at(-1)![4]!.documentIds).toEqual([source.document_id])

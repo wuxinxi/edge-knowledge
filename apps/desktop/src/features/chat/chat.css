@@ -829,3 +829,115 @@
   color: var(--muted);
   font-size: 11px;
 }
+
+.composer .reference-chips {
+  display: block;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.reference-scope-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.reference-scope-heading button {
+  font-size: var(--text-caption);
+}
+.reference-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 100px;
+  overflow-y: auto;
+}
+.reference-chip {
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  gap: 7px;
+}
+.reference-chip > svg,
+.reference-chip > button {
+  flex-shrink: 0;
+}
+.reference-chip-copy {
+  min-width: 0;
+}
+.reference-chip-copy strong,
+.reference-chip-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reference-chip-copy strong {
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+.reference-chip-copy small,
+.reference-scope-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.reference-scope-note {
+  margin: 7px 0 0;
+}
+.reference-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  margin: 4px 4px 8px;
+  padding: 0 9px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.reference-picker-search:focus-within {
+  border-color: var(--green);
+}
+.reference-picker-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 9px 0;
+  box-shadow: none;
+  font-size: var(--text-label);
+}
+.reference-picker-search input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.composer-picker .command-copy > strong,
+.composer-picker .command-copy > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reference-selected {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.picker-list > .reference-load-more {
+  justify-content: center;
+  font-size: var(--text-caption);
+  color: var(--muted);
+  padding: 9px;
+}
+.reference-picker-error {
+  padding: 10px;
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.reference-picker-error button {
+  margin-left: 8px;
+}

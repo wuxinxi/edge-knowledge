@@ -135,6 +135,15 @@ def create_app(
         with knowledge.transaction():
             return [asdict(item) for item in knowledge.repository.documents(library_id)]
 
+    @app.get("/api/libraries/{library_id}/reference-choices")
+    def reference_choices(
+        library_id: str,
+        q: Annotated[str, Query(max_length=400)] = "",
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        offset: Annotated[int, Query(ge=0, le=1000000)] = 0,
+    ):
+        return chat.queries.reference_choices(library_id, q, limit, offset)
+
     @app.post("/api/libraries/{library_id}/documents", status_code=201)
     async def ingest(library_id: str, file: Annotated[UploadFile, File()]):
         try:

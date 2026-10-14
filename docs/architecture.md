@@ -215,3 +215,7 @@ ChatService 与 QueryService 通过可选标准库 Callable 报告真实阶段�
 ## 完整资料读取与查询上下文
 
 `read` 是 QuerySpec 中的通用只读工具；`source_scope` 明确回答的证据范围，`use_context` 明确是否采用当前资料身份。QueryService 统一解析、校验和执行。应用层 DocumentReading 复用目录与原文端口，不解析特定标题或问句；KnowledgeService 在读原文前核验库归属及资料类型。Renderer 将显式引用与候选上下文分开，通过 shared/api/client 传输；使用请求级本地策略承接查找后的资料解读。上下文和完整文字通过现有会话/备份边界保存。完整流程与预算边界见 [通用资料读取与连续查询](document-query-flow.md)。
+
+## 聊天引用的目录浏览
+
+`QueryService.reference_choices` 复用目录镜像与现有 QuerySpec 过滤/排序/分页，输出有界身份摘要，不返回正文，也不调用嵌入或生成端口。API 验证关键词和分页边界；renderer 通过共享客户端访问并取消过期请求。引用的 title / path 作为可选展示快照进入原有会话与备份契约；执行范围仍只由真实资料 ID 和当前知识库归属决定。详见 [资料引用说明](reference-selection.md)。

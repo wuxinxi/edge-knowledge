@@ -2,6 +2,16 @@ import { usePreferences } from '../preferences/store'
 
 // Product copy is translated here; source text and model answers retain their original language.
 const english: Record<string, string> = {
+  当前资料范围: 'Current source scope',
+  清除引用: 'Clear sources',
+  '查找和回答仅使用这些资料；清除后可查找其他资料。':
+    'Search and answers use these sources only. Clear them to explore other files.',
+  '搜索资料标题、文件名或路径': 'Search source titles, filenames or paths',
+  '搜索标题、文件名或路径…': 'Search titles, filenames or paths…',
+  已引用: 'Selected',
+  加载更多: 'Load more',
+  重试: 'Retry',
+  使用所选模型总结与解释资料: 'Summarize and explain with your selected model',
   资料范围: 'Source scope',
   '：': ': ',
   筛选与统计: 'Filter and calculate',

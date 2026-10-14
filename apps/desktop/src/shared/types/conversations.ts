@@ -2,6 +2,8 @@ import type { Source, DuplicateComparison } from './api'
 export interface Reference {
   id: string
   filename: string
+  title?: string
+  path?: string
 }
 export interface AnswerVersion {
   resultKind?: import('./query').QueryResultKind

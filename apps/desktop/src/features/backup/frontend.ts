@@ -1,6 +1,6 @@
 import { chatStages } from '../../shared/types/processing'
 import { queryResultKinds } from '../../shared/types/query'
-import type { Conversation, Message } from '../chat/store'
+import type { Conversation, Message, Reference } from '../chat/store'
 import { validatePreferences, type Preferences } from '../../shared/preferences/store'
 
 export interface FrontendBackup {
@@ -35,10 +35,21 @@ export function validateChatBackup(value: unknown): Conversation[] {
     )
       throw new Error('对话备份包含无效记录。')
     ids.add(chat.id)
-    const reference = (ref: { id: string; filename: string }) => {
-      if (!ref || !string(ref.id, 100) || !string(ref.filename, 255))
+    const reference = (ref: Reference) => {
+      if (
+        !ref ||
+        !string(ref.id, 100) ||
+        !string(ref.filename, 255) ||
+        (ref.title != null && !string(ref.title, 20000)) ||
+        (ref.path != null && !string(ref.path, 4096))
+      )
         throw new Error('对话引用格式无效。')
-      return { id: ref.id, filename: ref.filename }
+      return {
+        id: ref.id,
+        filename: ref.filename,
+        ...(ref.title ? { title: ref.title } : {}),
+        ...(ref.path ? { path: ref.path } : {}),
+      }
     }
     const messages: Message[] = chat.messages.map((message) => {
       if (

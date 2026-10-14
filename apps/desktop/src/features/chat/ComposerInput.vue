@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { Component } from 'vue'
 import {
   AtSign,
   FileText,
@@ -21,8 +22,9 @@ import {
 import { useRouter } from 'vue-router'
 import { api } from '../../shared/api/client'
 import { useI18n } from '../../shared/i18n'
-import type { Document } from '../../shared/types/api'
+import type { ReferenceChoice } from '../../shared/types/api'
 import type { Reference } from './store'
+import { referenceLabel, referenceLocation, referenceDescription } from './references'
 const props = defineProps<{
   modelValue: string
   library: string
@@ -54,9 +56,14 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', dismiss)
   window.removeEventListener('resize', fitInput)
   request++
+  clearTimeout(searchTimer)
+  pending?.abort()
 })
 const input = ref<HTMLTextAreaElement>(),
-  documents = ref<Document[]>([]),
+  referenceSearch = ref<HTMLInputElement>(),
+  choices = ref<ReferenceChoice[]>([]),
+  total = ref(0),
+  offset = ref(0),
   loading = ref(false),
   error = ref('')
 const trigger = ref<'reference' | 'command' | ''>(''),
@@ -84,25 +91,65 @@ function focus() {
 }
 defineExpose({ focus })
 let request = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let pending: AbortController | undefined
+async function loadChoices(append = false) {
+  if (trigger.value !== 'reference') return
+  pending?.abort()
+  const controller = (pending = new AbortController())
+  const current = ++request
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await api.referenceChoices(
+      props.library,
+      query.value.trim(),
+      append ? offset.value : 0,
+      controller.signal,
+    )
+    if (current !== request) return
+    const items = append ? [...choices.value, ...result.items] : result.items
+    choices.value = [...new Map(items.map((item) => [item.document_id, item])).values()]
+    total.value = result.total
+    offset.value = result.offset + result.items.length
+    if (!append)
+      selected.value = Math.max(
+        0,
+        choices.value.findIndex(
+          (item) => !props.references.some((reference) => reference.id === item.document_id),
+        ),
+      )
+  } catch (cause) {
+    if (current === request && !controller.signal.aborted)
+      error.value = cause instanceof Error ? cause.message : t('无法读取资料')
+  } finally {
+    if (current === request) loading.value = false
+  }
+}
+watch(
+  () => [props.library, trigger.value, query.value],
+  () => {
+    ++request
+    pending?.abort()
+    clearTimeout(searchTimer)
+    choices.value = []
+    total.value = offset.value = selected.value = 0
+    error.value = ''
+    loading.value = trigger.value === 'reference'
+    if (trigger.value === 'reference') searchTimer = setTimeout(() => void loadChoices(), 160)
+  },
+)
 watch(
   () => props.library,
-  async (library) => {
-    const current = ++request
-    documents.value = []
+  () => {
     trigger.value = ''
-    loading.value = true
-    error.value = ''
-    try {
-      const result = await api.documents(library)
-      if (current === request) documents.value = result
-    } catch (cause) {
-      if (current === request)
-        error.value = cause instanceof Error ? cause.message : t('无法读取资料')
-    } finally {
-      if (current === request) loading.value = false
-    }
   },
-  { immediate: true },
+)
+watch(
+  () => props.busy,
+  (busy) => {
+    if (busy) trigger.value = ''
+  },
 )
 const commands = computed(() => [
   {
@@ -116,7 +163,7 @@ const commands = computed(() => [
     id: 'ask',
     alias: '问答',
     label: t('AI 解读'),
-    description: t('通过 DeepSeek 总结与解释资料'),
+    description: t('使用所选模型总结与解释资料'),
     icon: Sparkles,
   },
   {
@@ -162,37 +209,35 @@ const commands = computed(() => [
     icon: ShieldCheck,
   },
 ])
-const results = computed(() =>
+interface PickerOption {
+  id: string
+  label: string
+  description: string
+  icon: Component
+  reference?: Reference
+  chosen?: boolean
+}
+const results = computed<PickerOption[]>(() =>
   trigger.value === 'reference'
-    ? documents.value
-        .filter(
-          (item) =>
-            !props.references.some((ref) => ref.id === item.id) &&
-            item.filename.toLowerCase().includes(query.value.toLowerCase()),
-        )
-        .slice(0, 8)
-        .map((item) => ({
-          id: item.id,
-          label: item.filename,
-          icon: {
-            document: FileText,
-            image: Image,
-            audio: AudioLines,
-            video: Film,
-            bundle: Layers3,
-          }[item.kind],
-          description: t(
-            (
-              {
-                document: '文档',
-                image: '图片',
-                audio: '音频',
-                video: '视频',
-                bundle: '联合素材',
-              } as const
-            )[item.kind],
-          ),
-        }))
+    ? choices.value.map((item) => ({
+        id: item.document_id,
+        label: item.title || item.filename,
+        description: item.path || item.filename,
+        reference: {
+          id: item.document_id,
+          filename: item.filename,
+          title: item.title,
+          path: item.path,
+        },
+        chosen: props.references.some((ref) => ref.id === item.document_id),
+        icon: {
+          document: FileText,
+          image: Image,
+          audio: AudioLines,
+          video: Film,
+          bundle: Layers3,
+        }[item.kind],
+      }))
     : commands.value.filter(
         (item) =>
           (item.id !== 'new' || props.canCreateConversation) &&
@@ -226,18 +271,19 @@ async function openReferences() {
   selected.value = 0
   start.value = end.value = input.value?.selectionStart ?? props.modelValue.length
   await nextTick()
-  input.value?.focus()
+  referenceSearch.value?.focus()
 }
 async function pick(index: number) {
   const item = results.value[index]
-  if (!item || props.busy) return
+  if (!item || item.chosen || props.disabled || props.busy) return
   let remaining = props.modelValue.slice(0, start.value) + props.modelValue.slice(end.value)
   if (trigger.value === 'reference') {
     if (props.references.length >= 10) {
       error.value = t('最多引用 10 份资料')
       return
     }
-    emit('references', [...props.references, { id: item.id, filename: item.label }])
+    if (!item.reference) return
+    emit('references', [...props.references, item.reference])
   } else if (item.id === 'new') {
     // Remove the command from its original draft before navigation. A reused
     // empty conversation may already have an unfinished question of its own.
@@ -280,13 +326,20 @@ function keydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault()
       trigger.value = ''
+      void nextTick(() => input.value?.focus())
       return
     }
     if (['ArrowDown', 'ArrowUp'].includes(event.key) && results.value.length) {
       event.preventDefault()
-      selected.value =
-        (selected.value + (event.key === 'ArrowDown' ? 1 : -1) + results.value.length) %
-        results.value.length
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      for (let step = 1; step <= results.value.length; step++) {
+        const index =
+          (selected.value + direction * step + results.value.length) % results.value.length
+        if (!results.value[index]?.chosen) {
+          selected.value = index
+          break
+        }
+      }
       void nextTick(() =>
         document
           .getElementById(`composer-option-${selected.value}`)
@@ -299,8 +352,13 @@ function keydown(event: KeyboardEvent) {
       void pick(selected.value)
       return
     }
+    if (trigger.value === 'reference' && event.key === 'Enter') {
+      event.preventDefault()
+      return
+    }
   }
   if (
+    event.target === input.value &&
     event.key === 'Enter' &&
     !event.shiftKey &&
     (preferences.values.sendKey === 'enter'
@@ -321,22 +379,43 @@ watch(
 </script>
 <template>
   <div class="reference-chips" v-if="references.length">
-    <span class="reference-scope">{{ t('只检索所选资料') }}</span
-    ><span v-for="reference in references" :key="reference.id" class="reference-chip"
-      ><FileText :size="12" /><span>{{ reference.filename }}</span
-      ><button
+    <div class="reference-scope-heading">
+      <span class="reference-scope">{{ t('当前资料范围') }} · {{ references.length }}</span>
+      <button
         type="button"
-        :disabled="busy"
-        :aria-label="`${t('移除引用')} ${reference.filename}`"
-        @click="
-          emit(
-            'references',
-            references.filter((item) => item.id !== reference.id),
-          )
-        "
+        class="text-button"
+        :disabled="busy || disabled"
+        @click="emit('references', [])"
       >
-        <X :size="12" /></button
-    ></span>
+        {{ t('清除引用') }}
+      </button>
+    </div>
+    <div class="reference-chip-list">
+      <span
+        v-for="reference in references"
+        :key="reference.id"
+        class="reference-chip"
+        :title="referenceDescription(reference)"
+        ><FileText :size="13" /><span class="reference-chip-copy"
+          ><strong>{{ referenceLabel(reference) }}</strong
+          ><small v-if="referenceLocation(reference) !== referenceLabel(reference)">{{
+            referenceLocation(reference)
+          }}</small></span
+        ><button
+          type="button"
+          :disabled="busy || disabled"
+          :aria-label="`${t('移除引用')} ${referenceLabel(reference)}`"
+          @click="
+            emit(
+              'references',
+              references.filter((item) => item.id !== reference.id),
+            )
+          "
+        >
+          <X :size="12" /></button
+      ></span>
+    </div>
+    <p class="reference-scope-note">{{ t('查找和回答仅使用这些资料；清除后可查找其他资料。') }}</p>
   </div>
   <div ref="pickerWrap" class="composer-input-wrap">
     <textarea
@@ -363,10 +442,26 @@ watch(
     >
       <div class="picker-heading">
         <span>{{ trigger === 'reference' ? t('引用资料') : t('快捷命令') }}</span
-        ><span>{{ results.length }} {{ t('个选项') }}</span>
+        ><span>{{ trigger === 'reference' ? total : results.length }} {{ t('个选项') }}</span>
+      </div>
+      <div v-if="trigger === 'reference'" class="reference-picker-search">
+        <Search :size="14" />
+        <input
+          ref="referenceSearch"
+          v-model="query"
+          :disabled="disabled || busy"
+          maxlength="400"
+          :aria-label="t('搜索资料标题、文件名或路径')"
+          :placeholder="t('搜索标题、文件名或路径…')"
+          @keydown="keydown"
+        />
       </div>
       <div class="picker-list">
-        <div v-if="trigger === 'reference' && loading" class="picker-empty">
+        <div
+          v-if="trigger === 'reference' && loading && !results.length"
+          class="picker-empty"
+          role="status"
+        >
           <LoaderCircle :size="15" class="spin" />{{ t('正在读取资料…') }}
         </div>
         <button
@@ -376,6 +471,10 @@ watch(
           role="option"
           :aria-selected="selected === index"
           type="button"
+          :title="item.description"
+          :disabled="
+            disabled || busy || item.chosen || (trigger === 'reference' && references.length >= 10)
+          "
           :class="{ selected: selected === index }"
           @mousedown.prevent
           @click="pick(index)"
@@ -386,16 +485,41 @@ watch(
             ><strong>{{ item.label }}</strong
             ><small>{{ item.description }}</small></span
           ><span v-if="trigger === 'command'" class="command-name">/{{ item.id }}</span
+          ><span v-if="item.chosen" class="reference-selected">{{ t('已引用') }}</span
           ><CornerDownLeft v-else-if="selected === index" :size="14" />
         </button>
-        <p v-if="!loading && !results.length" class="picker-empty">
+        <p v-if="!loading && !error && !results.length" class="picker-empty">
           {{
-            trigger === 'reference' && !documents.length
+            trigger === 'reference' && !query.trim()
               ? t('请先在知识库中导入资料')
               : t('没有匹配的资料')
           }}
         </p>
+        <div v-if="error && trigger === 'reference'" class="reference-picker-error" role="alert">
+          <span>{{ error }}</span
+          ><button
+            type="button"
+            class="text-button"
+            :disabled="loading"
+            @click="loadChoices(choices.length > 0)"
+          >
+            {{ t('重试') }}
+          </button>
+        </div>
+        <button
+          v-if="trigger === 'reference' && offset < total && !error"
+          type="button"
+          class="reference-load-more"
+          :disabled="loading"
+          @mousedown.prevent
+          @click="loadChoices(true)"
+        >
+          {{ t(loading ? '正在读取资料…' : '加载更多') }} · {{ choices.length }} / {{ total }}
+        </button>
       </div>
+      <p v-if="trigger === 'reference' && references.length >= 10" class="picker-empty">
+        {{ t('最多引用 10 份资料') }}
+      </p>
       <div class="picker-footer">
         <span><kbd>↑</kbd> <kbd>↓</kbd> {{ t('选择') }}</span
         ><span><kbd>↵</kbd> {{ t('确认') }}</span
@@ -408,5 +532,5 @@ watch(
       <AtSign :size="14" />{{ t('引用资料') }}</button
     ><span>{{ t('输入 @ 引用资料，/ 使用快捷命令') }}</span>
   </div>
-  <div v-if="error" class="inline-error" role="alert">{{ error }}</div>
+  <div v-if="error && trigger !== 'reference'" class="inline-error" role="alert">{{ error }}</div>
 </template>
