@@ -1,0 +1,217 @@
+{
+  "scope": "isolated synthetic notes; actual local models; no cloud",
+  "cases": [
+    {
+      "id": "voice_two_conditions",
+      "seconds": 14.88,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 193,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "database_two_conditions",
+      "seconds": 9.18,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 123,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "hotel_two_conditions",
+      "seconds": 5.17,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 86,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "tool_answer_last",
+      "seconds": 9.32,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": false,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": false,
+      "answer_characters": 157,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "voice_no_joint_match",
+      "seconds": 8.84,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 114,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "tool_missing_evidence",
+      "seconds": 6.37,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": true,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": true,
+      "answer_characters": 87,
+      "history_messages": 0,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": true,
+        "allow_answer": true
+      }
+    },
+    {
+      "id": "database_followup_conditions",
+      "seconds": 18.95,
+      "checks": {
+        "local_answer": true,
+        "selected_reference_only": true,
+        "full_original": true,
+        "expected_first_named_candidate": false,
+        "does_not_decline_supported_choice": true,
+        "evidence_limit_explained": true,
+        "unsupported_choice_not_recommended": true,
+        "missing_facts_not_negated": true,
+        "legal_citations": true,
+        "no_error": true,
+        "completed": true,
+        "no_native_thinking_framing": true,
+        "not_truncated": true
+      },
+      "passed": false,
+      "answer_characters": 155,
+      "previous_passed": true,
+      "history_messages": 2,
+      "plan": {
+        "operation": "answer",
+        "source_scope": "full_document",
+        "use_context": true,
+        "context_count": 1,
+        "explicit_reference": false,
+        "allow_answer": true
+      }
+    }
+  ],
+  "passed": false
+}
