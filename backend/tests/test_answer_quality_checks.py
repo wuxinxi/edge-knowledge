@@ -90,3 +90,13 @@ def test_quality_signal_rejects_native_thinking_framing():
         {"type": "done"},
     ]
     assert not quality.evaluate(quality.CASES[0], events, "doc")["passed"]
+
+
+def test_quality_signal_recognizes_structured_generation_length_error():
+    events = [
+        {"type": "delta", "delta": "partial"},
+        {"type": "error", "code": "local_answer_incomplete"},
+    ]
+    result = quality.evaluate(quality.CASES[0], events, "doc")
+    assert not result["checks"]["not_truncated"]
+    assert not result["passed"]

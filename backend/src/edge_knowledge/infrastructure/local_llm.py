@@ -20,6 +20,7 @@ from openai import APIError, AsyncOpenAI, OpenAI
 from edge_knowledge.application.ports import SettingsStore
 from edge_knowledge.domain.models import AppError, ModelCapabilities, QueryPlan
 from edge_knowledge.domain.query import FIELDS, OPS, QuerySpec
+from edge_knowledge.infrastructure.answer_output import ANSWER_FORMAT, ANSWER_SCHEMA, AnswerOutput
 from edge_knowledge.infrastructure.deepseek import SYSTEM_PROMPT
 from edge_knowledge.infrastructure.planning_instructions import CONTENT_SELECTION
 
@@ -601,7 +602,7 @@ class LocalGenerator:
 
         session = await asyncio.to_thread(self.runtime.session)
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT + ANSWER_FORMAT},
             *[{"role": m.role, "content": m.content} for m in plan.history],
             {"role": "user", "content": plan.prompt},
         ]
@@ -624,6 +625,7 @@ class LocalGenerator:
                         max_tokens=1536,
                         temperature=0.4,
                         top_p=0.95,
+                        response_format={"type": "json_object", "schema": ANSWER_SCHEMA},
                         reasoning_effort="low" if thinking else "none",
                         extra_body={
                             "chat_template_kwargs": {"enable_thinking": thinking},
@@ -631,33 +633,31 @@ class LocalGenerator:
                             "repeat_penalty": 1.05,
                         },
                     )
-                    emitted, prefix = False, ""
+                    emitted, truncated = False, False
                     final = FinalContent()
+                    answer = AnswerOutput()
                     if not plan.stream:
                         choice = response.choices[0]
-                        content = final.feed(choice.message.content or "")
+                        content = answer.feed(final.feed(choice.message.content or ""))
+                        content += answer.finish(choice.finish_reason == "length")
                         if content.strip():
                             emitted = True
                             yield content
-                            if choice.finish_reason == "length":
-                                yield "\n\n（达到本次生成长度上限，回答可能未完整。）"
                     else:
                         async with response:
                             async for chunk in response:
                                 if not chunk.choices:
                                     continue
                                 choice = chunk.choices[0]
-                                content = final.feed(choice.delta.content or "")
-                                if emitted and content:
+                                content = answer.feed(final.feed(choice.delta.content or ""))
+                                if content:
+                                    emitted = True
                                     yield content
-                                elif content:
-                                    prefix += content
-                                    if prefix.strip():
-                                        emitted = True
-                                        yield prefix
-                                        prefix = ""
-                                if emitted and choice.finish_reason == "length":
-                                    yield "\n\n（达到本次生成长度上限，回答可能未完整。）"
+                                truncated = truncated or choice.finish_reason == "length"
+                        content = answer.finish(truncated)
+                        if content:
+                            emitted = True
+                            yield content
                     if emitted:
                         return
                     # Thought-only completions are not successful answers. A

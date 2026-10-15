@@ -301,7 +301,11 @@ def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
 
         async def create(self, **kwargs):
             requests.append(kwargs)
-            content = "" if len(requests) <= empty_attempts else expected
+            content = (
+                ""
+                if len(requests) <= empty_attempts
+                else json.dumps({"answer": expected, "details": ""}, ensure_ascii=False)
+            )
             if content_format == "orphan_close":
                 content = "</think>" + content
             elif content_format == "inline_thought":

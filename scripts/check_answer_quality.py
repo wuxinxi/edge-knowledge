@@ -164,7 +164,8 @@ def evaluate(case: dict, events: list[dict], document: str) -> dict:
         "no_error": not any(event["type"] == "error" for event in events),
         "completed": any(event["type"] == "done" for event in events),
         "no_native_thinking_framing": not re.search(r"</?think>", answer),
-        "not_truncated": "达到本次生成长度上限" not in answer,
+        "not_truncated": "达到本次生成长度上限" not in answer
+        and not any(event.get("code") == "local_answer_incomplete" for event in events),
     }
     return {
         "checks": checks,
@@ -189,10 +190,12 @@ def main():
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--embedding-path", required=True, type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--case", choices=[case["id"] for case in CASES])
+    parser.add_argument("--case", action="append", choices=[case["id"] for case in CASES])
+    parser.add_argument("--repeat", type=int, choices=range(1, 6), default=1)
     args = parser.parse_args()
     report = {
         "scope": "isolated synthetic notes; actual local models; no cloud",
+        "repetitions": args.repeat,
         "cases": [],
     }
     with tempfile.TemporaryDirectory(prefix="edge-answer-quality-") as directory:
@@ -235,9 +238,12 @@ def main():
                 return plan
 
             chat.queries.local_planner.plan = observe_plan
-            for case in CASES:
-                if args.case and case["id"] != args.case:
-                    continue
+            for round_number, case in (
+                (round_number, case)
+                for round_number in range(1, args.repeat + 1)
+                for case in CASES
+                if not args.case or case["id"] in args.case
+            ):
                 response = client.post(
                     "/api/libraries/default/documents",
                     files={"file": (case["id"] + ".md", case["text"].encode())},
@@ -296,6 +302,7 @@ def main():
                 report["cases"].append(
                     {
                         "id": case["id"],
+                        "round": round_number,
                         "seconds": round(time.monotonic() - start, 2),
                         **result,
                         **(
@@ -308,7 +315,13 @@ def main():
                     }
                 )
                 print(
-                    json.dumps({"case": case["id"], "passed": result["passed"]}),
+                    json.dumps(
+                        {
+                            "case": case["id"],
+                            "round": round_number,
+                            "passed": result["passed"],
+                        }
+                    ),
                     flush=True,
                 )
     report["passed"] = all(case["passed"] for case in report["cases"])
