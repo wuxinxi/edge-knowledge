@@ -232,8 +232,11 @@ def test_reference_goal_is_bounded_and_precedes_complex_query_planning(monkeypat
 
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("empty_attempts", [0, 1, 2])
+@pytest.mark.parametrize(
+    "content_format", ["plain", "orphan_close", "inline_thought", "unterminated_thought", "literal"]
+)
 def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
-    monkeypatch, stream, empty_attempts
+    monkeypatch, stream, empty_attempts, content_format
 ):
     requests, budgets = [], []
     runtime = SimpleNamespace(
@@ -266,10 +269,20 @@ def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
                     )
                 ]
             )
+            # Exercise every possible split inside the native template markers.
+            for character in self.content or "":
+                yield SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(content=character),
+                            finish_reason=None,
+                        )
+                    ]
+                )
             yield SimpleNamespace(
                 choices=[
                     SimpleNamespace(
-                        delta=SimpleNamespace(content=self.content),
+                        delta=SimpleNamespace(content=None),
                         finish_reason="stop",
                     )
                 ]
@@ -288,10 +301,20 @@ def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
 
         async def create(self, **kwargs):
             requests.append(kwargs)
-            return Response(None if len(requests) <= empty_attempts else "最终答案 [1]")
+            content = "" if len(requests) <= empty_attempts else expected
+            if content_format == "orphan_close":
+                content = "</think>" + content
+            elif content_format == "inline_thought":
+                content = "<think>private reasoning</think>" + content
+            elif content_format == "unterminated_thought" and not content:
+                content = "<think>private reasoning without final answer"
+            return Response(content)
 
     monkeypatch.setattr("edge_knowledge.infrastructure.local_llm.AsyncOpenAI", Client)
     plan = QueryPlan([], "给定依据", "edge-local", "", "", stream, provider="local")
+    expected = (
+        "示例：`<think>literal</think>` [1]" if content_format == "literal" else "\n  最终答案 [1]"
+    )
 
     async def collect():
         return [part async for part in LocalGenerator(runtime).generate(plan)]
@@ -301,7 +324,7 @@ def test_local_reasoning_is_budgeted_but_only_final_content_is_emitted(
             asyncio.run(collect())
         assert exc.value.code == "local_empty_answer"
     else:
-        assert asyncio.run(collect()) == ["最终答案 [1]"]
+        assert "".join(asyncio.run(collect())) == expected
     assert len(requests) == (1 if empty_attempts == 0 else 2)
     assert all(request["messages"] == requests[0]["messages"] for request in requests)
     assert requests[0]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True

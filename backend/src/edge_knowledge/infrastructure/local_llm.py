@@ -545,6 +545,46 @@ class LocalQueryPlanner:
             ) from exc
 
 
+class FinalContent:
+    """Remove leading native thinking framing without touching answer literals.
+
+    Some template/runtime combinations put framing into ``content`` instead of
+    ``reasoning_content``. Retain only a delimiter-sized tail while discarding
+    a leading thought block; never accumulate or emit that block as an answer.
+    """
+
+    def __init__(self):
+        self.pending = ""
+        self.state = "prefix"
+
+    def feed(self, content: str) -> str:
+        if self.state == "answer":
+            return content
+        self.pending += content
+        while True:
+            if self.state == "thinking":
+                end = self.pending.find("</think>")
+                if end < 0:
+                    self.pending = self.pending[-(len("</think>") - 1) :]
+                    return ""
+                self.pending = self.pending[end + len("</think>") :]
+                self.state = "prefix"
+            prefix = self.pending.lstrip()
+            if not prefix:
+                return ""
+            if prefix.startswith("<think>"):
+                self.pending = prefix[len("<think>") :]
+                self.state = "thinking"
+                continue
+            if prefix.startswith("</think>"):
+                self.pending = prefix[len("</think>") :]
+                continue
+            if any(marker.startswith(prefix) for marker in ("<think>", "</think>")):
+                return ""
+            answer, self.pending, self.state = self.pending, "", "answer"
+            return answer
+
+
 class LocalGenerator:
     def __init__(self, runtime: LlamaRuntime):
         self.runtime = runtime
@@ -592,9 +632,10 @@ class LocalGenerator:
                         },
                     )
                     emitted, prefix = False, ""
+                    final = FinalContent()
                     if not plan.stream:
                         choice = response.choices[0]
-                        content = choice.message.content or ""
+                        content = final.feed(choice.message.content or "")
                         if content.strip():
                             emitted = True
                             yield content
@@ -606,7 +647,7 @@ class LocalGenerator:
                                 if not chunk.choices:
                                     continue
                                 choice = chunk.choices[0]
-                                content = choice.delta.content or ""
+                                content = final.feed(choice.delta.content or "")
                                 if emitted and content:
                                     yield content
                                 elif content:
